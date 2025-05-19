@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         t3.chat Exa Search (English)
+// @name         t3.chat Exa Search
 // @namespace    http://tampermonkey.net/
-// @version      0.3.1
-// @description  Calls Exa API on t3.chat and provides configurable search parameters.
+// @version      0.3
+// @description  在 t3.chat 呼叫Exa API
 // @match        https://t3.chat/*
 // @match        https://beta.t3.chat/*
 // @match        https://beta.t3.chat/chat/*
@@ -19,8 +19,8 @@
     'use strict';
 
     // --- Configuration and State ---
-    const SCRIPT_NAME = "t3.chat Inject Search Toggle (with Exa API)";
-    const SCRIPT_VERSION = "0.3.1"; // Incrementing version for English translation
+    const SCRIPT_NAME = "t3.chat Inject Search Toggle (含 Exa API)";
+    const SCRIPT_VERSION = "0.3";
 
     const DEFAULT_EXA_NUM_RESULTS = 5;
     const DEFAULT_EXA_SUBPAGES = 2;
@@ -133,7 +133,7 @@
   #${UI_IDS.searchToggle}.${CSS_CLASSES.searchToggleLoading} { opacity: 0.6; position: relative; }
   #${UI_IDS.searchToggle}.${CSS_CLASSES.searchToggleLoading}::after { content: ''; position: absolute; top:50%; left:50%; width:12px; height:12px; margin:-6px 0 0 -6px; border:2px solid currentColor; border-radius:50%; border-top-color:transparent; animation:spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  /* Button toggle animation */
+  /* 按鈕切換動畫 */
   #${UI_IDS.searchToggle} { position: relative; overflow: hidden; transition: color 0.3s ease; }
   #${UI_IDS.searchToggle}::before { content: ''; position: absolute; inset: 0; background-color: rgba(219,39,119,0.15); transform: scaleX(0); transform-origin: left; transition: transform 0.3s ease; z-index:-1; }
   #${UI_IDS.searchToggle}.${CSS_CLASSES.searchToggleOn}::before { transform: scaleX(1); }
@@ -239,15 +239,15 @@
               <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
             </svg>
           </div>
-          <div>Enter Exa API Key</div><!-- Title -->
+          <div>輸入 Exa API Key</div><!-- Title -->
         </div>
-        <div id="${UI_IDS.apiKeyModalDescription}">Set your API Key to enable web search functionality.</div>
-        <input id="${UI_IDS.apiKeyInput}" type="password" placeholder="Enter your API Key" />
+        <div id="${UI_IDS.apiKeyModalDescription}">設置您的 API Key 以啟用網路搜尋功能</div>
+        <input id="${UI_IDS.apiKeyInput}" type="password" placeholder="輸入您的 API Key" />
         <div id="${UI_IDS.apiKeyShowLabelContainer}">
           <input id="${UI_IDS.apiKeyShowCheckbox}" type="checkbox" />
-          <label for="${UI_IDS.apiKeyShowCheckbox}">Show API Key</label>
+          <label for="${UI_IDS.apiKeyShowCheckbox}">顯示 API Key</label>
         </div>
-        <button id="${UI_IDS.apiKeySaveButton}">Save Settings</button>
+        <button id="${UI_IDS.apiKeySaveButton}">儲存設定</button>
       </div>`;
             document.body.appendChild(wrapper);
             ApiKeyModal._attachEventListeners(wrapper);
@@ -514,7 +514,7 @@
                 if (searchRes) {
                     // Ensure originalPrompt is always present, even if searchRes is extensive.
                     const englishInstruction = "The following information was retrieved from a real-time web search using an external tool. Please use these results to inform your response:\n";
-                    messages[lastIdx].content = `${englishInstruction}\n[Web Search Results]\n${searchRes}\n\n[Original Message]\n${originalPrompt}`;
+                    messages[lastIdx].content = `${englishInstruction}\n【網路搜尋結果】\n${searchRes}\n\n【原始訊息】\n${originalPrompt}`;
                     initOptions.body = JSON.stringify(data);
                     Logger.log("Search results prepended to prompt with English instruction.");
                 } else {
@@ -622,7 +622,7 @@
     // --- Core: Tampermonkey Menu Commands ---
     const MenuCommands = {
         init: async () => {
-            GM_registerMenuCommand('Reset Exa API Key', async () => {
+            GM_registerMenuCommand('重設 Exa API Key', async () => {
                 await GM_setValue(GM_STORAGE_KEYS.EXA_API_KEY, '');
                 exaApiKey = null; // Clear in-memory key
                 Logger.log("Exa API Key reset via menu.");
@@ -643,18 +643,18 @@
                 // defaultValueForPromptDisplay is the ultimate fallback for the prompt.
                 // const currentGMValue = await GM_getValue(storageKey, defaultValueForPromptDisplay); // Get fresh value for prompt - used if liveValue wasn't passed or stale
 
-                GM_registerMenuCommand(`Set Exa ${name} (Current: ${liveValueForMenuText}, Default: ${defaultValueForPromptDisplay})`, async () => {
+                GM_registerMenuCommand(`設定 Exa ${name} (目前: ${liveValueForMenuText}, 預設: ${defaultValueForPromptDisplay})`, async () => {
                     // Fetch fresh value again right before showing prompt, in case it changed in another tab or menu wasn't re-rendered.
                     const promptCurrentValue = await GM_getValue(storageKey, defaultValueForPromptDisplay);
-                    const newValueStr = prompt(`Enter new Exa ${name} (integer, default: ${defaultValueForPromptDisplay}):`, promptCurrentValue);
+                    const newValueStr = prompt(`輸入新的 Exa ${name} (整數, 預設: ${defaultValueForPromptDisplay}):`, promptCurrentValue);
                     if (newValueStr !== null) {
                         const parsedValue = parseInt(newValueStr, 10);
                         if (!isNaN(parsedValue) && parsedValue >= 0) {
                             await GM_setValue(storageKey, parsedValue);
-                            Logger.log(`Exa ${name} set to: ${parsedValue}. Reloading...`);
+                            Logger.log(`Exa ${name} 設定為: ${parsedValue}。正在重新載入...`);
                             location.reload(); // Reload to apply changes and update menu command text
                         } else {
-                            alert(`Invalid input. Please enter a non-negative integer. ${name} not changed (Current: ${promptCurrentValue}).`);
+                            alert(`輸入無效。請輸入一個非負整數。 ${name} 未變更 (目前: ${promptCurrentValue})。`);
                         }
                     }
                 });
@@ -663,24 +663,24 @@
             // Create menu commands for each configurable Exa parameter
             // Pass the current live values (exaNumResults etc.) for the menu text
             // and the defaults for the prompt's fallback.
-            await createNumericConfigCommand(GM_STORAGE_KEYS.EXA_NUM_RESULTS, "Search Results Count", DEFAULT_EXA_NUM_RESULTS, exaNumResults);
-            await createNumericConfigCommand(GM_STORAGE_KEYS.EXA_SUBPAGES, "Subpages Count", DEFAULT_EXA_SUBPAGES, exaSubpages);
-            await createNumericConfigCommand(GM_STORAGE_KEYS.EXA_LINKS, "Links Count", DEFAULT_EXA_LINKS, exaLinks);
-            await createNumericConfigCommand(GM_STORAGE_KEYS.EXA_IMAGE_LINKS, "Image Links Count", DEFAULT_EXA_IMAGE_LINKS, exaImageLinks);
+            await createNumericConfigCommand(GM_STORAGE_KEYS.EXA_NUM_RESULTS, "搜尋結果數量", DEFAULT_EXA_NUM_RESULTS, exaNumResults);
+            await createNumericConfigCommand(GM_STORAGE_KEYS.EXA_SUBPAGES, "子頁面數量", DEFAULT_EXA_SUBPAGES, exaSubpages);
+            await createNumericConfigCommand(GM_STORAGE_KEYS.EXA_LINKS, "連結數量", DEFAULT_EXA_LINKS, exaLinks);
+            await createNumericConfigCommand(GM_STORAGE_KEYS.EXA_IMAGE_LINKS, "圖片連結數量", DEFAULT_EXA_IMAGE_LINKS, exaImageLinks);
 
             // Placeholder for a future liveCrawl policy configuration menu item:
             /*
             // Assuming exaLiveCrawlPolicy state variable and DEFAULT_EXA_LIVE_CRAWL_POLICY constant exist
             // const currentLiveCrawlPolicy = await GM_getValue(GM_STORAGE_KEYS.EXA_LIVE_CRAWL_POLICY, DEFAULT_EXA_LIVE_CRAWL_POLICY);
-            // GM_registerMenuCommand(`Set Exa Live Crawl Policy (Current: ${exaLiveCrawlPolicy}, Default: ${DEFAULT_EXA_LIVE_CRAWL_POLICY})`, async () => {
+            // GM_registerMenuCommand(`設定 Exa Live Crawl Policy (目前: ${exaLiveCrawlPolicy}, 預設: ${DEFAULT_EXA_LIVE_CRAWL_POLICY})`, async () => {
             //     const promptCurrentValue = await GM_getValue(GM_STORAGE_KEYS.EXA_LIVE_CRAWL_POLICY, DEFAULT_EXA_LIVE_CRAWL_POLICY);
-            //     const newValue = prompt(`Enter Exa Live Crawl Policy (e.g., 'always', 'cached', 'if_needed'. Default: ${DEFAULT_EXA_LIVE_CRAWL_POLICY}):`, promptCurrentValue);
+            //     const newValue = prompt(`輸入 Exa Live Crawl Policy (例如: 'always', 'cached', 'if_needed'. 預設: ${DEFAULT_EXA_LIVE_CRAWL_POLICY}):`, promptCurrentValue);
             //     if (newValue !== null && newValue.trim() !== "") {
             //         await GM_setValue(GM_STORAGE_KEYS.EXA_LIVE_CRAWL_POLICY, newValue.trim());
-            //         Logger.log(`Exa Live Crawl Policy set to: ${newValue.trim()}. Reloading...`);
+            //         Logger.log(`Exa Live Crawl Policy 設定為: ${newValue.trim()}。正在重新載入...`);
             //         location.reload();
             //     } else if (newValue !== null) {
-            //         alert(`Input cannot be empty. Policy not changed (Current: ${promptCurrentValue}).`);
+            //         alert(`輸入不可為空。Policy 未變更 (目前: ${promptCurrentValue})。`);
             //     }
             // });
             */

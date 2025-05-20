@@ -1,3 +1,3 @@
 Use with Tampermonkey. 
-Register for the Exa API. 
+Register for the Exa API or Perplexity API. 
 And enjoy!

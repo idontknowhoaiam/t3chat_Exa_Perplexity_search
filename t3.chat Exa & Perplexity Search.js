@@ -217,7 +217,6 @@
     }
   }
 
-  /* 按鈕切換動畫 */
   #${UI_IDS.searchToggle} { position: relative; overflow: hidden; transition: color 0.3s ease; }
   #${UI_IDS.searchToggle}::before { content: ''; position: absolute; inset: 0; background-color: rgba(219,39,119,0.15); transform: scaleX(0); transform-origin: left; transition: transform 0.3s ease; z-index:-1; }
   #${UI_IDS.searchToggle}.${CSS_CLASSES.searchToggleOn}::before { transform: scaleX(1); }

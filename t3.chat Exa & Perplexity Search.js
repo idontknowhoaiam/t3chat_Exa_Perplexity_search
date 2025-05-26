@@ -437,6 +437,14 @@
     font-size: 14px;
     margin-bottom: 24px;
   }
+  /* Perplexity Config Save Button - Match Exa's colors */
+  #${UI_IDS.perplexityConfigSaveButton} {
+    background-color: #a02553; /* Same as Exa save button color */
+    color: white;
+  }
+  #${UI_IDS.perplexityConfigSaveButton}:hover {
+    background-color: #c62a88; /* Same as Exa save button hover */
+  }
   /* Note: Slider and button styles within Perplexity modal re-use existing .exa-config- classes */
             `;
             document.head.appendChild(styleEl);
@@ -924,6 +932,15 @@
                     onload(res) {
                         if (isResolved) return;
                         isResolved = true;
+                        // Handle non-2xx statuses before parsing JSON (avoid HTML error pages)
+                        if (res.status < 200 || res.status >= 300) {
+                            Logger.error("Perplexity API request failed with status", res.status, "Response:", res.responseText?.substring(0,200));
+                            // If unauthorized, prompt for API key
+                            if (res.status === 401) {
+                                ApiKeyModal.show();
+                            }
+                            return resolve(null);
+                        }
                         let data;
                         try {
                             data = JSON.parse(res.responseText);

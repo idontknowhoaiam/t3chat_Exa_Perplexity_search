@@ -437,14 +437,6 @@
     font-size: 14px;
     margin-bottom: 24px;
   }
-  /* Perplexity Config Save Button - Match Exa's colors */
-  #${UI_IDS.perplexityConfigSaveButton} {
-    background-color: #a02553; /* Same as Exa save button color */
-    color: white;
-  }
-  #${UI_IDS.perplexityConfigSaveButton}:hover {
-    background-color: #c62a88; /* Same as Exa save button hover */
-  }
   /* Note: Slider and button styles within Perplexity modal re-use existing .exa-config- classes */
             `;
             document.head.appendChild(styleEl);

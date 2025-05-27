@@ -217,7 +217,7 @@
     }
   }
 
-  /* 按鈕切換動畫 */
+  /* Button toggle animation */
   #${UI_IDS.searchToggle} { position: relative; overflow: hidden; transition: color 0.3s ease; }
   #${UI_IDS.searchToggle}::before { content: ''; position: absolute; inset: 0; background-color: rgba(219,39,119,0.15); transform: scaleX(0); transform-origin: left; transition: transform 0.3s ease; z-index:-1; }
   #${UI_IDS.searchToggle}.${CSS_CLASSES.searchToggleOn}::before { transform: scaleX(1); }
@@ -655,7 +655,6 @@
                     { value: 'sonar-deep-research', text: 'sonar-deep-research'},
                     { value: 'sonar-reasoning', text: 'sonar-reasoning'},
                     { value: 'sonar-reasoning-pro', text: 'sonar-reasoning-pro'},
-                    { value: 'r1-1776', text: 'r1-1776'}
                 ]
             },
             { type: 'slider', storageKey: GM_STORAGE_KEYS.PERPLEXITY_TEMPERATURE, label: 'Temperature (0.0-2.0):', min: 0, max: 2, step: 0.1, defaultValue: DEFAULT_PERPLEXITY_TEMPERATURE, sliderId: UI_IDS.perplexityTemperatureSlider, valueId: UI_IDS.perplexityTemperatureValue },
@@ -845,15 +844,31 @@
                                 resolve(null); // Or a message indicating no results
                             } else {
                                 let combinedText = "";
+                                let urlList = []; // Collect all links
                                 for (const result of data.results) {
-                                    if (result.title) combinedText += `Title: ${result.title}\n`;
-                                    if (result.url) combinedText += `URL: ${result.url}\n`;
+                                    if (result.title && result.url) {
+                                        combinedText += `Title: [${result.title}](${result.url})\n`;
+                                        urlList.push(`- [${result.title}](${result.url})`);
+                                    } else if (result.title) {
+                                        combinedText += `Title: ${result.title}\n`;
+                                    }
+                                    if (result.url && !result.title) {
+                                        combinedText += `URL: [${result.url}](${result.url})\n`;
+                                        urlList.push(`- [${result.url}](${result.url})`);
+                                    }
                                     // Text content is directly in result.text if requested via contents.text
                                     if (result.text) combinedText += `Text: ${result.text}\n`;
                                     // Summary is directly in result.summary if requested via contents.summary
                                     if (result.summary) combinedText += `Summary: ${result.summary}\n`;
                                     combinedText += '---\n';
                                 }
+                                
+                                // Add all links list at the end of results
+                                if (urlList.length > 0) {
+                                    combinedText += '\n**Related Links:**\n';
+                                    combinedText += urlList.join('\n') + '\n';
+                                }
+                                
                                 resolve(LaTeXProcessor.process(combinedText.trim()));
                             }
                         } else {
@@ -952,7 +967,16 @@
                         Logger.log(`[${SCRIPT_NAME}] Perplexity API raw full response data (from GM_xmlhttpRequest):`, JSON.stringify(data));
 
                         if (res.status >= 200 && res.status < 300 && data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
-                            const combinedText = `Source: Perplexity AI (${perplexityModel})\nContent: ${data.choices[0].message.content}`;
+                            let content = data.choices[0].message.content;
+                            
+                            // Use API-provided citations for links
+                            const citations = data.citations || [];
+                            let linksSection = '';
+                            if (Array.isArray(citations) && citations.length > 0) {
+                                const uniqueUrls = [...new Set(citations.filter(url => typeof url === 'string' && url))];
+                                linksSection = '\n\n**Citations:**\n' + uniqueUrls.map(url => `- [${url}](${url})`).join('\n');
+                            }
+                            const combinedText = `Source: Perplexity AI (${perplexityModel})\nContent: ${content}${linksSection}`;
                             resolve(LaTeXProcessor.process(combinedText.trim()));
                         } else {
                             Logger.error("Perplexity API error or unexpected structure (from GM_xmlhttpRequest):", res.status, data);
@@ -1360,4 +1384,4 @@
         // Use Logger.error if debugMode is already set, but console.error ensures it's always visible for critical startup failures.
     });
 
-  })(); 
+  })();

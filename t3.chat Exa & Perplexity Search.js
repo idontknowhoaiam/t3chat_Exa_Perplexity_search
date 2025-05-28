@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         t3.chat Exa & Perplexity Search
+// @name         T3 chat Exa & Perplexity Search
 // @namespace    http://tampermonkey.net/
 // @version      0.4
 // @description  Call Exa or Perplexity API on t3.chat

@@ -42,7 +42,6 @@
     const DEFAULT_PERPLEXITY_FREQUENCY_PENALTY = 0;
 
     const GM_STORAGE_KEYS = {
-        DEBUG: 'debug',
         SELECTED_API_PROVIDER: 'selectedApiProvider',
         API_KEY_EXA: 'exaApiKey',
         EXA_NUM_RESULTS: 'exaNumResults',
@@ -129,7 +128,6 @@
     };
 
     // --- State Variables ---
-    let debugMode = false;
     let selectedApiProvider = API_PROVIDERS.EXA;
     let exaApiKey = null;
     let perplexityApiKey = null;
@@ -156,37 +154,6 @@
             timeout = setTimeout(() => func.apply(context, args), delay);
         };
     }
-
-    // --- Utility: Logger ---
-    const Logger = {
-        log: () => {},
-        error: () => {}
-    };
-
-    // --- Utility: LaTeX Processor ---
-    const LaTeXProcessor = {
-        map: [
-            { pattern: /(\d+)(?:\\,)?(?:\^)?\circ\mathrm{C}/g, replacement: '$1°C' },
-            { pattern: /(\d+)(?:\\,)?(?:\^)?\circ\mathrm{F}/g, replacement: '$1°F' },
-            { pattern: /(\d+)(?:\\,)?(?:\^)?\circ/g, replacement: '$1°' },
-            { pattern: /\times/g, replacement: '×' },
-            { pattern: /\div/g, replacement: '÷' },
-            { pattern: /\pm/g, replacement: '±' },
-            { pattern: /\sqrt{([^}]+)}/g, replacement: '√($1)' },
-            { pattern: /\frac{([^}]+)}{([^}]+)}/g, replacement: '$1/$2' },
-            { pattern: /\mathrm{([^}]+)}/g, replacement: '$1' },
-            { pattern: /\text(?:bf)?{([^}]+)}/g, replacement: '$1' },
-            { pattern: /\left\(/g, replacement: '(' },
-            { pattern: /\right\)/g, replacement: ')' },
-            { pattern: /\,/g, replacement: ' ' },
-            { pattern: /\%/g, replacement: '%' },
-        ],
-        process: function(text) {
-            return text
-                ? this.map.reduce((t, { pattern, replacement }) => t.replace(pattern, replacement), text)
-                : text;
-        }
-    };
 
     // --- Core: Style Management ---
     const StyleManager = {
@@ -842,7 +809,7 @@
                                     combinedText += urlList.join('\n') + '\n';
                                 }
 
-                                resolve(LaTeXProcessor.process(combinedText.trim()));
+                                resolve(combinedText.trim());
                             }
                         } else {
                             resolve(null);
@@ -935,7 +902,7 @@
                                 linksSection = '\n\n**Citations:**\n' + uniqueUrls.map(url => `- [${url}](${url})`).join('\n');
                             }
                             const combinedText = `Source: Perplexity AI (${perplexityModel})\nContent: ${content}${linksSection}`;
-                            resolve(LaTeXProcessor.process(combinedText.trim()));
+                            resolve(combinedText.trim());
                         } else {
                             resolve(null);
                         }
@@ -951,9 +918,7 @@
                         resolve(null);
                     }
                 });
-                // GM_xmlhttpRequest has its own timeout handling, so the manual setTimeout for abort is not strictly needed in the same way as fetch.
-                // However, it's good practice to ensure the promise resolves if something unexpected happens with GM_xmlhttpRequest not calling callbacks.
-                // For simplicity, we rely on GM_xmlhttpRequest's own timeout for now.
+
             });
         }
     };
@@ -1061,8 +1026,6 @@
             w.t3ChatSearch = w.t3ChatSearch || { needSearch: false }; // Ensure namespace exists
             FetchInterceptor.originalFetch = w.fetch.bind(w); // Bind to w (unsafeWindow)
             w.fetch = async function(input, initOptions) { // Use standard function to ensure 'this' is unsafeWindow
-                // Use FetchInterceptor.originalFetch to call original
-                // Access unsafeWindow.t3ChatSearch directly
 
                 if (!unsafeWindow.t3ChatSearch.needSearch || !initOptions?.body) {
                     return FetchInterceptor.originalFetch.call(this, input, initOptions);
@@ -1126,94 +1089,6 @@
         }
     };
 
-    // --- Core: DOM Content Correction (Math Expressions) ---
-    const DOMCorrector = {
-        _processNodeAndItsTextDescendants: function(node) {
-            if (!node) return false;
-            let processed = false;
-            if (node.nodeType === Node.TEXT_NODE) {
-                const orig = node.textContent;
-                const proc = LaTeXProcessor.process(orig);
-                if (proc !== orig) {
-                    node.textContent = proc;
-                    processed = true;
-                }
-            } else if (node.nodeType === Node.ELEMENT_NODE) {
-                // Only create a TreeWalker if the node is an element and might contain text nodes
-                if (node.hasChildNodes()) { // Small optimization: only walk if there are children
-                    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-                    let textNode;
-                    while (textNode = walker.nextNode()) {
-                        const origContent = textNode.textContent;
-                        const procContent = LaTeXProcessor.process(origContent);
-                        if (procContent !== origContent) {
-                            textNode.textContent = procContent;
-                            processed = true;
-                        }
-                    }
-                }
-            }
-            return processed;
-        },
-
-        _fixMathInChatInternal: (mutations) => { // Renamed internal function
-            let changesMadeOverall = false;
-            if (!mutations || mutations.length === 0) { // Full scan for initial run or manual call without mutations
-                const logContainer = document.querySelector(SELECTORS.chatLogContainer);
-                const container = logContainer || document.querySelector(SELECTORS.mainContentArea) || document.querySelector(SELECTORS.chatArea);
-                if (!container) {
-                    return;
-                }
-                if (DOMCorrector._processNodeAndItsTextDescendants(container)) {
-                    changesMadeOverall = true;
-                }
-            } else { // Selective update based on mutations
-                for (const mutation of mutations) {
-                    if (mutation.type === 'childList') {
-                        for (const addedNode of mutation.addedNodes) {
-                            if (DOMCorrector._processNodeAndItsTextDescendants(addedNode)) {
-                                changesMadeOverall = true;
-                            }
-                        }
-                        // For removedNodes, no action is needed for this feature.
-                    } else if (mutation.type === 'characterData') {
-                        // mutation.target is the text node that changed.
-                        if (DOMCorrector._processNodeAndItsTextDescendants(mutation.target)) {
-                            changesMadeOverall = true;
-                        }
-                    }
-                }
-            }
-
-        },
-
-        // Debounced version will be assigned after the object is defined
-        fixMathInChat: null,
-
-        observeChatChanges: () => {
-            // Assign the debounced function here, ensuring 'this' context is correct if methods rely on it
-            // However, _fixMathInChatInternal is static-like, so direct debouncing is fine.
-            DOMCorrector.fixMathInChat = debounce(DOMCorrector._fixMathInChatInternal, 250);
-
-            const logContainer = document.querySelector(SELECTORS.chatLogContainer);
-            const chatContainer = logContainer || document.querySelector(SELECTORS.mainContentArea) || document.querySelector(SELECTORS.chatArea) || document.body;
-
-            if (!chatContainer) {
-                return;
-            }
-
-            const observer = new MutationObserver((mutationsList) => {
-                // Call the debounced function
-                DOMCorrector.fixMathInChat(mutationsList);
-            });
-            observer.observe(chatContainer, { subtree: true, childList: true, characterData: true });
-
-            // Initial full run - call the internal function directly or the debounced one.
-            // Calling the internal one for immediate first pass might be preferred.
-            DOMCorrector._fixMathInChatInternal(null);
-        }
-    };
-
     // --- Core: Tampermonkey Menu Commands ---
     const MenuCommands = {
         init: async () => {
@@ -1233,13 +1108,6 @@
                 location.reload();
             });
 
-            GM_registerMenuCommand('Toggle debug logs', async () => {
-                const newDebug = !(await GM_getValue(GM_STORAGE_KEYS.DEBUG, false));
-                await GM_setValue(GM_STORAGE_KEYS.DEBUG, newDebug);
-                debugMode = newDebug; // Update current session's debug mode
-                location.reload();
-            });
-
             GM_registerMenuCommand('Configure API Parameters', async () => {
                 selectedApiProvider = await GM_getValue(GM_STORAGE_KEYS.SELECTED_API_PROVIDER, API_PROVIDERS.EXA);
                 if (selectedApiProvider === API_PROVIDERS.EXA) {
@@ -1254,8 +1122,6 @@
 
     // --- Initialization ---
     async function main() {
-        debugMode = await GM_getValue(GM_STORAGE_KEYS.DEBUG, false);
-
         selectedApiProvider = await GM_getValue(GM_STORAGE_KEYS.SELECTED_API_PROVIDER, API_PROVIDERS.EXA);
 
         exaApiKey = await GM_getValue(GM_STORAGE_KEYS.API_KEY_EXA);
@@ -1287,17 +1153,13 @@
         StyleManager.injectGlobalStyles();
         FetchInterceptor.init(); // Init fetch interceptor early
 
-        // Observer for search toggle button injection
-        // Try to find a more stable parent if justifyDiv itself is dynamic
         const injectionObserverTargetParent = document.querySelector(SELECTORS.justifyDiv)?.parentElement || document.body;
         const injectionObserver = new MutationObserver(async (mutations, obs) => {
             // Check if the specific target for injection is now available
             const targetContainer = document.querySelector(SELECTORS.mlGroup);
             if (targetContainer) {
                  if(await UIManager.injectSearchToggle()) {
-                    // If successfully injected into the specific target,
-                    // we might not need to observe anymore, or observe less broadly.
-                    // For now, let it run to handle dynamic re-rendering of this part of UI.
+
                  }
             } else {
                 // If even the broader justifyDiv is gone, try to re-inject if it reappears.
@@ -1307,8 +1169,6 @@
         });
         injectionObserver.observe(injectionObserverTargetParent, { childList: true, subtree: true });
         await UIManager.injectSearchToggle(); // Initial attempt
-
-        DOMCorrector.observeChatChanges();
 
     }
 

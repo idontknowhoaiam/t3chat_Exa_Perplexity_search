@@ -159,10 +159,8 @@
 
     // --- Utility: Logger ---
     const Logger = {
-        log: (...args) => {
-            if (debugMode) console.log(`[${SCRIPT_NAME}]`, ...args);
-        },
-        error: (...args) => console.error(`[${SCRIPT_NAME}]`, ...args)
+        log: () => {},
+        error: () => {}
     };
 
     // --- Utility: LaTeX Processor ---
@@ -448,7 +446,6 @@
   /* Note: Slider and button styles within Perplexity modal re-use existing .exa-config- classes */
             `;
             document.head.appendChild(styleEl);
-            Logger.log("Global styles injected.");
         }
     };
 
@@ -493,7 +490,6 @@
       </div>`;
             document.body.appendChild(wrapper);
             ApiKeyModal._attachEventListeners(wrapper);
-            Logger.log("API Key modal shown.");
         },
         _attachEventListeners: (modalElement) => {
             const keyInput = modalElement.querySelector(`#${UI_IDS.apiKeyInput}`);
@@ -528,7 +524,6 @@
                     await GM_setValue(GM_STORAGE_KEYS.SELECTED_API_PROVIDER, currentProvider);
                     selectedApiProvider = currentProvider;
 
-                    Logger.log(`${currentProvider} API Key saved. Selected provider: ${currentProvider}`);
                     modalElement.remove();
                     ApiKeyModal._isShown = false;
                     location.reload();
@@ -586,7 +581,6 @@
             document.body.appendChild(wrapper);
             this._modalElement = wrapper;
             this._attachEventListeners();
-            Logger.log("Exa Config modal shown.");
         },
 
         hide: function() {
@@ -595,7 +589,6 @@
                 this._modalElement = null;
             }
             this._isShown = false;
-            Logger.log("Exa Config modal hidden.");
         },
 
         _attachEventListeners: function() {
@@ -619,7 +612,6 @@
             const saveButton = this._modalElement.querySelector(`#${UI_IDS.exaConfigSaveButton}`);
             if (saveButton) {
                 saveButton.addEventListener('click', async () => {
-                    Logger.log("Saving Exa configuration...");
                     for (const config of this.SLIDER_CONFIG) {
                         const slider = this._modalElement.querySelector(`#${config.sliderId}`);
                         if (slider) {
@@ -630,11 +622,9 @@
                             else if (config.storageKey === GM_STORAGE_KEYS.EXA_SUBPAGES) exaSubpages = value;
                             else if (config.storageKey === GM_STORAGE_KEYS.EXA_LINKS) exaLinks = value;
                             else if (config.storageKey === GM_STORAGE_KEYS.EXA_IMAGE_LINKS) exaImageLinks = value;
-                            Logger.log(`Set ${config.storageKey} to ${value}`);
                         }
                     }
                     this.hide();
-                    Logger.log("Exa configuration saved. Reloading page.");
                     location.reload();
                 });
             }
@@ -711,7 +701,6 @@
             document.body.appendChild(wrapper);
             this._modalElement = wrapper;
             this._attachEventListeners();
-            Logger.log("Perplexity Config modal shown.");
         },
 
         hide: function() {
@@ -720,7 +709,6 @@
                 this._modalElement = null;
             }
             this._isShown = false;
-            Logger.log("Perplexity Config modal hidden.");
         },
 
         _attachEventListeners: function() {
@@ -747,7 +735,6 @@
             const saveButton = this._modalElement.querySelector(`#${UI_IDS.perplexityConfigSaveButton}`);
             if (saveButton) {
                 saveButton.addEventListener('click', async () => {
-                    Logger.log("Saving Perplexity configuration...");
                     for (const config of this.CONFIG_ITEMS) {
                         let value;
                         if (config.type === 'slider') {
@@ -772,11 +759,9 @@
                             else if (config.storageKey === GM_STORAGE_KEYS.PERPLEXITY_TOP_K) perplexityTopK = value;
                             else if (config.storageKey === GM_STORAGE_KEYS.PERPLEXITY_PRESENCE_PENALTY) perplexityPresencePenalty = value;
                             else if (config.storageKey === GM_STORAGE_KEYS.PERPLEXITY_FREQUENCY_PENALTY) perplexityFrequencyPenalty = value;
-                            Logger.log(`Set ${config.storageKey} to ${value}`);
                         }
                     }
                     this.hide();
-                    Logger.log("Perplexity configuration saved. Reloading page.");
                     location.reload();
                 });
             }
@@ -787,11 +772,9 @@
     const ExaAPI = {
         call: async (prompt, contextMessages = []) => {
             if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
-                Logger.error("ExaAPI.call: Invalid prompt");
                 return null;
             }
             if (!exaApiKey) {
-                Logger.error("ExaAPI.call: Exa API Key is not set.");
                 ApiKeyModal.show(); // Show the generic API key modal
                 return null;
             }
@@ -813,7 +796,6 @@
                 }
             };
 
-            Logger.log("Calling Exa API (/search) with prompt:", prompt, "Request body:", requestBody);
 
             return new Promise((resolve) => {
                 let isResolved = false;
@@ -826,21 +808,12 @@
                         if (isResolved) return;
                         clearTimeout(timeoutId);
                         isResolved = true;
-                        let data;
-                        try {
-                            data = JSON.parse(res.responseText);
-                        } catch (e) {
-                            Logger.error("Failed to parse Exa response JSON:", e, "\nOriginal response:", res.responseText?.substring(0, 500) + "...");
-                            return resolve(null);
-                        }
+                        let data = JSON.parse(res.responseText);
 
                         // Handle response from /search endpoint
                         // It returns an object with a "results" array.
                         if (res.status >= 200 && res.status < 300 && data && Array.isArray(data.results)) {
-                            console.log(`[${SCRIPT_NAME}] Exa API raw response (object, click to expand 'results' array):`, data); // Log raw Exa API response
-                            console.log(`[${SCRIPT_NAME}] Exa API raw response (JSON string):`, JSON.stringify(data, null, 2)); // Log as pretty-printed JSON string
                             if (data.results.length === 0) {
-                                Logger.log("Exa API returned 0 results.");
                                 resolve(null); // Or a message indicating no results
                             } else {
                                 let combinedText = "";
@@ -862,31 +835,28 @@
                                     if (result.summary) combinedText += `Summary: ${result.summary}\n`;
                                     combinedText += '---\n';
                                 }
-                                
+
                                 // Add all links list at the end of results
                                 if (urlList.length > 0) {
                                     combinedText += '\n**Related Links:**\n';
                                     combinedText += urlList.join('\n') + '\n';
                                 }
-                                
+
                                 resolve(LaTeXProcessor.process(combinedText.trim()));
                             }
                         } else {
-                            Logger.error("Exa API error or unexpected structure for /search:", res.status, data);
                             resolve(null);
                         }
                     },
                     onerror(err) {
                         if (isResolved) return;
                         clearTimeout(timeoutId);
-                        Logger.error("Exa API request failed:", err);
                         isResolved = true;
                         resolve(null);
                     },
                     ontimeout() {
                         if (isResolved) return;
                         isResolved = true;
-                        Logger.error("Exa API request timed out (native timeout).");
                         resolve(null);
                     }
                 });
@@ -894,7 +864,6 @@
                     if (isResolved) return;
                     isResolved = true;
                     if (req && typeof req.abort === 'function') req.abort();
-                    Logger.error("Exa API request timed out (custom timeout).");
                     resolve(null);
                 }, API_CONFIG.apiRequestTimeout);
             });
@@ -905,11 +874,9 @@
     const PerplexityAPI = {
         call: async (prompt, contextMessages = []) => {
             if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
-                Logger.error("PerplexityAPI.call: Invalid prompt");
                 return null;
             }
             if (!perplexityApiKey) {
-                Logger.error("PerplexityAPI.call: Perplexity API Key is not set.");
                 ApiKeyModal.show();
                 return null;
             }
@@ -931,7 +898,6 @@
                 requestBody.top_k = perplexityTopK;
             }
 
-            Logger.log("Calling Perplexity API (/chat/completions) via GM_xmlhttpRequest. Endpoint:", API_CONFIG.perplexityEndpoint, "Request body:", JSON.stringify(requestBody), "Headers (subset for logging):", {"Content-Type": "application/json", "Authorization": `Bearer ${perplexityApiKey.substring(0, 8)}...`});
 
             return new Promise((resolve) => {
                 let isResolved = false;
@@ -949,26 +915,18 @@
                         isResolved = true;
                         // Handle non-2xx statuses before parsing JSON (avoid HTML error pages)
                         if (res.status < 200 || res.status >= 300) {
-                            Logger.error("Perplexity API request failed with status", res.status, "Response:", res.responseText?.substring(0,200));
                             // If unauthorized, prompt for API key
                             if (res.status === 401) {
                                 ApiKeyModal.show();
                             }
                             return resolve(null);
                         }
-                        let data;
-                        try {
-                            data = JSON.parse(res.responseText);
-                        } catch (e) {
-                            Logger.error("Failed to parse Perplexity response JSON:", e, "\nOriginal response status:", res.status, "\nResponse text substring:", res.responseText?.substring(0, 500) + "...");
-                            return resolve(null);
-                        }
+                        let data = JSON.parse(res.responseText);
 
-                        Logger.log(`[${SCRIPT_NAME}] Perplexity API raw full response data (from GM_xmlhttpRequest):`, JSON.stringify(data));
 
                         if (res.status >= 200 && res.status < 300 && data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
                             let content = data.choices[0].message.content;
-                            
+
                             // Use API-provided citations for links
                             const citations = data.citations || [];
                             let linksSection = '';
@@ -979,20 +937,17 @@
                             const combinedText = `Source: Perplexity AI (${perplexityModel})\nContent: ${content}${linksSection}`;
                             resolve(LaTeXProcessor.process(combinedText.trim()));
                         } else {
-                            Logger.error("Perplexity API error or unexpected structure (from GM_xmlhttpRequest):", res.status, data);
                             resolve(null);
                         }
                     },
                     onerror(err) {
                         if (isResolved) return;
                         isResolved = true;
-                        Logger.error("Perplexity API request failed (GM_xmlhttpRequest onerror):", err);
                         resolve(null);
                     },
                     ontimeout() {
                         if (isResolved) return;
                         isResolved = true;
-                        Logger.error("Perplexity API request timed out (GM_xmlhttpRequest ontimeout).");
                         resolve(null);
                     }
                 });
@@ -1047,24 +1002,27 @@
                 if (typeof unsafeWindow !== 'undefined' && unsafeWindow.t3ChatSearch) {
                     unsafeWindow.t3ChatSearch.needSearch = isOn;
                 }
-                Logger.log(`Search toggle set to: ${isOn}`);
             });
+            // Preserve toggle state across UI re-renders
+            if (typeof unsafeWindow !== 'undefined' && unsafeWindow.t3ChatSearch && unsafeWindow.t3ChatSearch.needSearch) {
+                btn.classList.add(CSS_CLASSES.searchToggleOn);
+                btn.setAttribute("aria-label", "Disable search");
+                btn.setAttribute("data-state", "open");
+                btn.dataset.mode = "on";
+            }
             return btn;
         },
         injectSearchToggle: async () => {
             const justifyDiv = document.querySelector(SELECTORS.justifyDiv);
             if (!justifyDiv) {
-                Logger.log("❌ justifyDiv not found for search toggle injection.");
                 return false;
             }
             const modelTempSection = justifyDiv.querySelector(SELECTORS.modelTempSection);
             if (!modelTempSection) {
-                Logger.log("❌ modelTempSection not found.");
                 return false;
             }
             const mlGroup = modelTempSection.querySelector(SELECTORS.mlGroup);
             if (!mlGroup) {
-                Logger.log("❌ mlGroup not found.");
                 return false;
             }
 
@@ -1079,7 +1037,6 @@
 
             UIManager.searchToggleButton = await UIManager._createSearchToggleButton();
             mlGroup.appendChild(UIManager.searchToggleButton);
-            Logger.log("✅ SearchToggle injected.");
             return true;
         },
         updateSearchToggleLoadingState: (isLoading) => {
@@ -1098,7 +1055,6 @@
         originalFetch: null,
         init: () => {
             if (typeof unsafeWindow === 'undefined') {
-                Logger.error("unsafeWindow is not available. Fetch interception disabled.");
                 return;
             }
             const w = unsafeWindow;
@@ -1134,7 +1090,6 @@
                     return FetchInterceptor.originalFetch.call(this, input, initOptions);
                 }
 
-                Logger.log("Fetch intercepted for potential search enhancement.");
                 UIManager.updateSearchToggleLoadingState(true);
 
                 const contextMessagesForApi = API_CONFIG.conversationContextEnabled ? messages.slice(0, lastIdx) : [];
@@ -1150,7 +1105,6 @@
                             return `${roleDisplay}: ${content}`;
                         }).join('\n'); // Join distinct messages with newlines.
                         exaQuery = `Conversation History:\n${formattedHistory}\n\nLatest User Query: ${originalPrompt}`;
-                        Logger.log("Exa query enhanced with formatted history. New query length:", exaQuery.length);
                     }
                     searchRes = await ExaAPI.call(exaQuery, contextMessagesForApi); // contextMessagesForApi is still passed for potential future direct use by ExaAPI
                 } else if (selectedApiProvider === API_PROVIDERS.PERPLEXITY) {
@@ -1164,14 +1118,11 @@
                     const englishInstruction = "The following information was retrieved from a real-time web search using an external tool. Please use these results to inform your response:\n";
                     messages[lastIdx].content = `${englishInstruction}\n[Web Search Results]\n${searchRes}\n\n[Original Message]\n${originalPrompt}`;
                     initOptions.body = JSON.stringify(data);
-                    Logger.log("Search results prepended to prompt with English instruction.");
                 } else {
-                    Logger.log("No search results to prepend, or search failed.");
                     // Do not modify the prompt if searchRes is null or empty
                 }
                 return FetchInterceptor.originalFetch.call(this, input, initOptions);
             };
-            Logger.log("Fetch interceptor initialized.");
         }
     };
 
@@ -1211,7 +1162,6 @@
                 const logContainer = document.querySelector(SELECTORS.chatLogContainer);
                 const container = logContainer || document.querySelector(SELECTORS.mainContentArea) || document.querySelector(SELECTORS.chatArea);
                 if (!container) {
-                    // Logger.log("Chat container not found for full math fixing scan.");
                     return;
                 }
                 if (DOMCorrector._processNodeAndItsTextDescendants(container)) {
@@ -1235,7 +1185,6 @@
                 }
             }
 
-            // if (changesMadeOverall) Logger.log("Math expressions fixed in DOM (selectively or full scan).");
         },
 
         // Debounced version will be assigned after the object is defined
@@ -1250,7 +1199,6 @@
             const chatContainer = logContainer || document.querySelector(SELECTORS.mainContentArea) || document.querySelector(SELECTORS.chatArea) || document.body;
 
             if (!chatContainer) {
-                Logger.error("Failed to find a suitable chat container for DOM observation.");
                 return;
             }
 
@@ -1263,7 +1211,6 @@
             // Initial full run - call the internal function directly or the debounced one.
             // Calling the internal one for immediate first pass might be preferred.
             DOMCorrector._fixMathInChatInternal(null);
-            Logger.log("Chat observer for math corrections initialized (selective updates with debounce).");
         }
     };
 
@@ -1279,11 +1226,9 @@
                 if (selectedApiProvider === API_PROVIDERS.EXA) {
                     await GM_setValue(GM_STORAGE_KEYS.API_KEY_EXA, '');
                     exaApiKey = null;
-                    Logger.log("Exa API Key reset via menu.");
                 } else if (selectedApiProvider === API_PROVIDERS.PERPLEXITY) {
                     await GM_setValue(GM_STORAGE_KEYS.API_KEY_PERPLEXITY, '');
                     perplexityApiKey = null;
-                    Logger.log("Perplexity API Key reset via menu.");
                 }
                 location.reload();
             });
@@ -1292,7 +1237,6 @@
                 const newDebug = !(await GM_getValue(GM_STORAGE_KEYS.DEBUG, false));
                 await GM_setValue(GM_STORAGE_KEYS.DEBUG, newDebug);
                 debugMode = newDebug; // Update current session's debug mode
-                Logger.log(`Debug mode toggled to: ${newDebug} via menu. Reloading...`);
                 location.reload();
             });
 
@@ -1305,30 +1249,23 @@
                 }
             });
 
-            Logger.log("Menu commands registered.");
         }
     };
 
     // --- Initialization ---
     async function main() {
         debugMode = await GM_getValue(GM_STORAGE_KEYS.DEBUG, false);
-        Logger.log(`${SCRIPT_NAME} v${SCRIPT_VERSION} starting. Debug mode: ${debugMode}`);
 
         selectedApiProvider = await GM_getValue(GM_STORAGE_KEYS.SELECTED_API_PROVIDER, API_PROVIDERS.EXA);
-        Logger.log(`Selected API Provider: ${selectedApiProvider}`);
 
         exaApiKey = await GM_getValue(GM_STORAGE_KEYS.API_KEY_EXA);
         if (!exaApiKey) {
-            Logger.log("Exa API Key not found. It will be requested upon first search attempt if Exa is selected.");
         } else {
-            Logger.log("Exa API Key loaded.");
         }
 
         perplexityApiKey = await GM_getValue(GM_STORAGE_KEYS.API_KEY_PERPLEXITY);
         if (!perplexityApiKey) {
-            Logger.log("Perplexity API Key not found. It will be requested upon first search attempt if Perplexity is selected.");
         } else {
-            Logger.log("Perplexity API Key loaded.");
         }
 
         // Load configurable Exa parameters
@@ -1336,7 +1273,6 @@
         exaSubpages = await GM_getValue(GM_STORAGE_KEYS.EXA_SUBPAGES, DEFAULT_EXA_SUBPAGES);
         exaLinks = await GM_getValue(GM_STORAGE_KEYS.EXA_LINKS, DEFAULT_EXA_LINKS);
         exaImageLinks = await GM_getValue(GM_STORAGE_KEYS.EXA_IMAGE_LINKS, DEFAULT_EXA_IMAGE_LINKS);
-        Logger.log(`Exa API params loaded: numResults=${exaNumResults}, subpages=${exaSubpages}, links=${exaLinks}, imageLinks=${exaImageLinks}`);
 
         // Load configurable Perplexity parameters
         perplexityModel = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_MODEL, DEFAULT_PERPLEXITY_MODEL);
@@ -1346,7 +1282,6 @@
         perplexityTopK = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_TOP_K, DEFAULT_PERPLEXITY_TOP_K);
         perplexityPresencePenalty = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_PRESENCE_PENALTY, DEFAULT_PERPLEXITY_PRESENCE_PENALTY);
         perplexityFrequencyPenalty = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_FREQUENCY_PENALTY, DEFAULT_PERPLEXITY_FREQUENCY_PENALTY);
-        Logger.log(`Perplexity API params loaded: model=${perplexityModel}, temperature=${perplexityTemperature}, maxTokens=${perplexityMaxTokens}, topP=${perplexityTopP}, topK=${perplexityTopK}, presencePenalty=${perplexityPresencePenalty}, frequencyPenalty=${perplexityFrequencyPenalty}`);
 
         await MenuCommands.init();
         StyleManager.injectGlobalStyles();
@@ -1375,13 +1310,9 @@
 
         DOMCorrector.observeChatChanges();
 
-        Logger.log("Initialization complete.");
     }
 
     // --- Start the script ---
-    main().catch(err => {
-        console.error(`[${SCRIPT_NAME}] Unhandled error in main function:`, err);
-        // Use Logger.error if debugMode is already set, but console.error ensures it's always visible for critical startup failures.
-    });
+    main();
 
   })();

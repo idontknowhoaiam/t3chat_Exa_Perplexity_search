@@ -1134,13 +1134,13 @@
         } else {
         }
 
-        // Load configurable Exa parameters
+
         exaNumResults = await GM_getValue(GM_STORAGE_KEYS.EXA_NUM_RESULTS, DEFAULT_EXA_NUM_RESULTS);
         exaSubpages = await GM_getValue(GM_STORAGE_KEYS.EXA_SUBPAGES, DEFAULT_EXA_SUBPAGES);
         exaLinks = await GM_getValue(GM_STORAGE_KEYS.EXA_LINKS, DEFAULT_EXA_LINKS);
         exaImageLinks = await GM_getValue(GM_STORAGE_KEYS.EXA_IMAGE_LINKS, DEFAULT_EXA_IMAGE_LINKS);
 
-        // Load configurable Perplexity parameters
+
         perplexityModel = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_MODEL, DEFAULT_PERPLEXITY_MODEL);
         perplexityTemperature = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_TEMPERATURE, DEFAULT_PERPLEXITY_TEMPERATURE);
         perplexityMaxTokens = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_MAX_TOKENS, DEFAULT_PERPLEXITY_MAX_TOKENS);
@@ -1155,21 +1155,34 @@
 
         const injectionObserverTargetParent = document.querySelector(SELECTORS.justifyDiv)?.parentElement || document.body;
         const injectionObserver = new MutationObserver(async (mutations, obs) => {
-            // Check if the specific target for injection is now available
+
             const targetContainer = document.querySelector(SELECTORS.mlGroup);
             if (targetContainer) {
                  if(await UIManager.injectSearchToggle()) {
 
                  }
             } else {
-                // If even the broader justifyDiv is gone, try to re-inject if it reappears.
+
                 const justifyDiv = document.querySelector(SELECTORS.justifyDiv);
                 if (justifyDiv) await UIManager.injectSearchToggle();
+            }
+
+
+            const existingButton = document.querySelector(`#${UI_IDS.searchToggle}`);
+            if (!existingButton) {
+                await UIManager.injectSearchToggle();
             }
         });
         injectionObserver.observe(injectionObserverTargetParent, { childList: true, subtree: true });
         await UIManager.injectSearchToggle(); // Initial attempt
 
+
+        setInterval(async () => {
+            const existingButton = document.querySelector(`#${UI_IDS.searchToggle}`);
+            if (!existingButton) {
+                await UIManager.injectSearchToggle();
+            }
+        }, 100);
     }
 
     // --- Start the script ---

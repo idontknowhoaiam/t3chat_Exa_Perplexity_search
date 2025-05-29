@@ -122,7 +122,7 @@
     };
 
     const CSS_CLASSES = {
-        button: "inline-flex items-center justify-center whitespace-nowrap font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 disabled:cursor-not-allowed hover:bg-muted/40 hover:text-foreground disabled:hover:bg-transparent disabled:hover:text-foreground/50 px-3 text-xs -mb-1.5 h-auto gap-2 rounded-full border border-solid border-secondary-foreground/10 py-1.5 pl-2 pr-2.5 text-muted-foreground",
+        button: "inline-flex items-center justify-center whitespace-nowrap font-medium transition-colors focus-visible:outline-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 disabled:cursor-not-allowed hover:text-foreground disabled:hover:bg-transparent disabled:hover:text-foreground/50 px-3 text-xs -mb-1.5 h-auto gap-2 rounded-full border border-solid border-secondary-foreground/10 py-1.5 pl-2 pr-2.5 text-muted-foreground max-sm:p-2",
         searchToggleLoading: 'loading',
         searchToggleOn: 'on'
     };
@@ -183,11 +183,10 @@
   }
 
   /* Button toggle animation */
-  #${UI_IDS.searchToggle} { position: relative; overflow: hidden; transition: color 0.3s ease; }
-  #${UI_IDS.searchToggle}::before { content: ''; position: absolute; inset: 0; background-color: rgba(219,39,119,0.15); transform: scaleX(0); transform-origin: left; transition: transform 0.3s ease; z-index:-1; }
-  #${UI_IDS.searchToggle}.${CSS_CLASSES.searchToggleOn}::before { transform: scaleX(1); }
-  #${UI_IDS.searchToggle} svg { transition: transform 0.3s ease; }
-  #${UI_IDS.searchToggle}.${CSS_CLASSES.searchToggleOn} svg { transform: rotate(360deg); }
+  #${UI_IDS.searchToggle} { position: relative; overflow: hidden; }
+  #${UI_IDS.searchToggle}.${CSS_CLASSES.searchToggleOn} { background-color: rgba(219,39,119,0.15) !important; }
+  #${UI_IDS.searchToggle}.${CSS_CLASSES.searchToggleOn}:hover { background-color: rgba(219,39,119,0.15) !important; }
+  #${UI_IDS.searchToggle}:not(.${CSS_CLASSES.searchToggleOn}):hover { background-color: rgba(0,0,0,0.04) !important; }
 
   /* API Key Modal Styles */
   #${UI_IDS.apiKeyModal} {
@@ -938,7 +937,7 @@
         <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
         <path d="M2 12h20"></path>
       </svg>
-      Search
+      <span class="max-sm:hidden">Search</span>
             `;
             btn.className = CSS_CLASSES.button;
             btn.dataset.mode = "off"; // Original attribute, kept for compatibility if anything relied on it

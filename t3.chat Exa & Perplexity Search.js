@@ -4,6 +4,7 @@
 // @version      0.4
 // @description  Call Exa or Perplexity API on t3.chat
 // @match        https://t3.chat/*
+// @match        https://t3.chat/chat/*
 // @match        https://beta.t3.chat/*
 // @match        https://beta.t3.chat/chat/*
 // @grant        GM_getValue
@@ -410,6 +411,51 @@
     background-color: #c62a88; /* Same as Exa save button hover */
   }
   /* Note: Slider and button styles within Perplexity modal re-use existing .exa-config- classes */
+
+  /* Tooltip styles for search button */
+  #search-toggle {
+    position: relative !important;
+    overflow: visible !important;
+  }
+  .search-tooltip {
+    display: inline-block !important; /* Auto-fit width to content */
+    position: absolute !important;
+    bottom: 35px !important; /* Move tooltip downwards */
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    background: #000 !important;
+    color: #fff !important;
+    padding: 8px 12px !important;
+    border-radius: 6px !important;
+    font-size: 12px !important;
+    white-space: nowrap !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    transition: all 0.2s ease !important;
+    z-index: 99999 !important;
+    pointer-events: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
+  }
+  .search-tooltip::after {
+    content: '' !important;
+    position: absolute !important;
+    top: 100% !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 0 !important;
+    height: 0 !important;
+    border-left: 6px solid transparent !important;
+    border-right: 6px solid transparent !important;
+    border-top: 6px solid #000 !important;
+  }
+  #search-toggle:hover .search-tooltip {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+  /* Hide tooltip arrow */
+  .search-tooltip::after {
+    display: none !important;
+  }
             `;
             document.head.appendChild(styleEl);
         }
@@ -931,6 +977,15 @@
             btn.type = "button";
             btn.setAttribute("aria-label", "Enable search");
             btn.setAttribute("data-state", "closed");
+            
+            // Get current API provider and model name for tooltip
+            const currentProvider = await GM_getValue(GM_STORAGE_KEYS.SELECTED_API_PROVIDER, API_PROVIDERS.EXA);
+            let modelName = 'Exa API';
+            if (currentProvider === API_PROVIDERS.PERPLEXITY) {
+                const currentModel = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_MODEL, DEFAULT_PERPLEXITY_MODEL);
+                modelName = currentModel;
+            }
+            
             btn.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe h-4 w-4 scale-x-[-1]">
         <circle cx="12" cy="12" r="10"></circle>
@@ -940,7 +995,14 @@
       <span class="max-sm:hidden">Search</span>
             `;
             btn.className = CSS_CLASSES.button;
-            btn.dataset.mode = "off"; // Original attribute, kept for compatibility if anything relied on it
+            btn.style.position = 'relative';
+            btn.dataset.mode = "off";
+            
+            // Create and add tooltip element
+            const tooltip = document.createElement('div');
+            tooltip.className = 'search-tooltip';
+            tooltip.textContent = modelName;
+            btn.appendChild(tooltip);
 
             btn.addEventListener("click", async () => {
                 // Ensure API keys and provider are loaded/refreshed before toggle logic

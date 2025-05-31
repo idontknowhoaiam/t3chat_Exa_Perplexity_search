@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         T3 chat Exa & Perplexity Search
 // @namespace    http://tampermonkey.net/
-// @version      0.4
+// @version      0.5
 // @description  Call Exa or Perplexity API on t3.chat
 // @match        https://t3.chat/*
 // @match        https://t3.chat/chat/*
@@ -17,788 +17,529 @@
 // @grant        GM_registerMenuCommand
 // ==/UserScript==
 
-(async function() {
+(function() {
     'use strict';
 
-    // --- Configuration and State ---
-    const SCRIPT_NAME = "t3.chat Inject Search Toggle (with Exa & Perplexity API)";
-    const SCRIPT_VERSION = "0.4";
+    // ==================== React-like Framework ====================
 
-    const API_PROVIDERS = {
-        EXA: 'exa',
-        PERPLEXITY: 'perplexity'
-    };
-
-    const DEFAULT_EXA_NUM_RESULTS = 5;
-    const DEFAULT_EXA_SUBPAGES = 2;
-    const DEFAULT_EXA_LINKS = 3;
-    const DEFAULT_EXA_IMAGE_LINKS = 0;
-
-    const DEFAULT_PERPLEXITY_MODEL = 'sonar';
-    const DEFAULT_PERPLEXITY_TEMPERATURE = 0.7;
-    const DEFAULT_PERPLEXITY_MAX_TOKENS = 512;
-    const DEFAULT_PERPLEXITY_TOP_P = 1;
-    const DEFAULT_PERPLEXITY_TOP_K = 0; // 0 means not used by Perplexity
-    const DEFAULT_PERPLEXITY_PRESENCE_PENALTY = 0;
-    const DEFAULT_PERPLEXITY_FREQUENCY_PENALTY = 0;
-
-    const GM_STORAGE_KEYS = {
-        SELECTED_API_PROVIDER: 'selectedApiProvider',
-        API_KEY_EXA: 'exaApiKey',
-        EXA_NUM_RESULTS: 'exaNumResults',
-        EXA_SUBPAGES: 'exaSubpages',
-        EXA_LINKS: 'exaLinks',
-        EXA_IMAGE_LINKS: 'exaImageLinks',
-        API_KEY_PERPLEXITY: 'perplexityApiKey',
-        PERPLEXITY_MODEL: 'perplexityModel',
-        PERPLEXITY_TEMPERATURE: 'perplexityTemperature',
-        PERPLEXITY_MAX_TOKENS: 'perplexityMaxTokens',
-        PERPLEXITY_TOP_P: 'perplexityTopP',
-        PERPLEXITY_TOP_K: 'perplexityTopK',
-        PERPLEXITY_PRESENCE_PENALTY: 'perplexityPresencePenalty',
-        PERPLEXITY_FREQUENCY_PENALTY: 'perplexityFrequencyPenalty'
-    };
-
-    const API_CONFIG = {
-        exaEndpoint: 'https://api.exa.ai/search',
-        perplexityEndpoint: 'https://api.perplexity.ai/chat/completions',
-        conversationContextEnabled: true,
-        apiRequestTimeout: 300000 // Increased timeout to 300 seconds (5 minutes)
-    };
-
-    const SELECTORS = {
-        justifyDiv: 'div.mt-2.flex-row-reverse.justify-between',
-        modelTempSection: 'div.flex.flex-col',
-        mlGroup: 'div.ml-\\[-7px\\]', // Escaped for querySelector
-        chatLogContainer: 'div[role="log"][aria-label="Chat messages"]',
-        mainContentArea: 'main',
-        chatArea: '.chat'
-    };
-
-    const UI_IDS = {
-        styleElement: 't3chat-search-style',
-        apiKeyModal: 'api-key-modal',
-        apiKeyModalContent: 'api-key-modal-content',
-        apiKeyModalHeader: 'api-key-modal-header',
-        apiKeyModalDescription: 'api-key-modal-description',
-        apiProviderSelect: 'api-provider-select',
-        apiKeyInput: 'api-key-input',
-        apiKeyShowCheckbox: 'api-key-show',
-        apiKeyShowLabelContainer: 'api-key-show-label-container',
-        apiKeySaveButton: 'api-key-save',
-        searchToggle: 'search-toggle',
-        exaConfigModal: 'exa-config-modal',
-        exaConfigModalContent: 'exa-config-modal-content',
-        exaConfigModalHeader: 'exa-config-modal-header-id',
-        exaConfigModalDescription: 'exa-config-modal-description-id',
-        exaConfigCloseButton: 'exa-config-close-button',
-        exaConfigSaveButton: 'exa-config-save-button',
-        numResultsSlider: 'exa-num-results-slider',
-        numResultsValue: 'exa-num-results-value',
-        subpagesSlider: 'exa-subpages-slider',
-        subpagesValue: 'exa-subpages-value',
-        linksSlider: 'exa-links-slider',
-        linksValue: 'exa-links-value',
-        imageLinksSlider: 'exa-image-links-slider',
-        imageLinksValue: 'exa-image-links-value',
-        perplexityConfigModal: 'perplexity-config-modal',
-        perplexityConfigModalContent: 'perplexity-config-modal-content',
-        perplexityConfigModalHeader: 'perplexity-config-modal-header',
-        perplexityConfigModalDescription: 'perplexity-config-modal-description',
-        perplexityConfigCloseButton: 'perplexity-config-close-button',
-        perplexityConfigSaveButton: 'perplexity-config-save-button',
-        perplexityModelSelect: 'perplexity-model-select',
-        perplexityTemperatureSlider: 'perplexity-temperature-slider',
-        perplexityTemperatureValue: 'perplexity-temperature-value',
-        perplexityMaxTokensSlider: 'perplexity-max-tokens-slider',
-        perplexityMaxTokensValue: 'perplexity-max-tokens-value',
-        perplexityTopPSlider: 'perplexity-top-p-slider',
-        perplexityTopPValue: 'perplexity-top-p-value',
-        perplexityTopKSlider: 'perplexity-top-k-slider',
-        perplexityTopKValue: 'perplexity-top-k-value',
-        perplexityPresencePenaltySlider: 'perplexity-presence-penalty-slider',
-        perplexityPresencePenaltyValue: 'perplexity-presence-penalty-value',
-        perplexityFrequencyPenaltySlider: 'perplexity-frequency-penalty-slider',
-        perplexityFrequencyPenaltyValue: 'perplexity-frequency-penalty-value'
-    };
-
-    const CSS_CLASSES = {
-        button: "inline-flex items-center justify-center whitespace-nowrap font-medium transition-colors focus-visible:outline-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 disabled:cursor-not-allowed hover:text-foreground disabled:hover:bg-transparent disabled:hover:text-foreground/50 px-3 text-xs -mb-1.5 h-auto gap-2 rounded-full border border-solid border-secondary-foreground/10 py-1.5 pl-2 pr-2.5 text-muted-foreground max-sm:p-2",
-        searchToggleLoading: 'loading',
-        searchToggleOn: 'on'
-    };
-
-    // --- State Variables ---
-    let selectedApiProvider = API_PROVIDERS.EXA;
-    let exaApiKey = null;
-    let perplexityApiKey = null;
-
-    let exaNumResults = DEFAULT_EXA_NUM_RESULTS;
-    let exaSubpages = DEFAULT_EXA_SUBPAGES;
-    let exaLinks = DEFAULT_EXA_LINKS;
-    let exaImageLinks = DEFAULT_EXA_IMAGE_LINKS;
-
-    let perplexityModel = DEFAULT_PERPLEXITY_MODEL;
-    let perplexityTemperature = DEFAULT_PERPLEXITY_TEMPERATURE;
-    let perplexityMaxTokens = DEFAULT_PERPLEXITY_MAX_TOKENS;
-    let perplexityTopP = DEFAULT_PERPLEXITY_TOP_P;
-    let perplexityTopK = DEFAULT_PERPLEXITY_TOP_K;
-    let perplexityPresencePenalty = DEFAULT_PERPLEXITY_PRESENCE_PENALTY;
-    let perplexityFrequencyPenalty = DEFAULT_PERPLEXITY_FREQUENCY_PENALTY;
-
-    // --- Utility: Debounce ---
-    function debounce(func, delay) {
-        let timeout;
-        return function(...args) {
-            const context = this;
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func.apply(context, args), delay);
-        };
-    }
-
-    // --- Core: Style Management ---
-    const StyleManager = {
-        injectGlobalStyles: () => {
-            if (document.getElementById(UI_IDS.styleElement)) return;
-            const styleEl = document.createElement('style');
-            styleEl.id = UI_IDS.styleElement;
-            // Using template literals for multiline strings requires backticks `
-            styleEl.textContent = `
-  /* Spinner - New globe flip animation */
-  #${UI_IDS.searchToggle}.${CSS_CLASSES.searchToggleLoading} {
-    opacity: 0.8; /* Keep it slightly dimmed */
-  }
-  #${UI_IDS.searchToggle}.${CSS_CLASSES.searchToggleLoading} svg.lucide-globe { /* Target the globe icon specifically */
-    animation: globe-flip 1.2s linear infinite;
-  }
-  @keyframes globe-flip {
-    0% {
-      transform: scaleX(-1) rotateY(0deg); /* Maintain existing horizontal flip, start normal */
-    }
-    50% {
-      transform: scaleX(-1) rotateY(180deg);
-    }
-    100% {
-      transform: scaleX(-1) rotateY(360deg);
-    }
-  }
-
-  /* Button toggle animation */
-  #${UI_IDS.searchToggle} { position: relative; overflow: hidden; }
-  #${UI_IDS.searchToggle}.${CSS_CLASSES.searchToggleOn} { background-color: rgba(219,39,119,0.15) !important; }
-  #${UI_IDS.searchToggle}.${CSS_CLASSES.searchToggleOn}:hover { background-color: rgba(219,39,119,0.15) !important; }
-  #${UI_IDS.searchToggle}:not(.${CSS_CLASSES.searchToggleOn}):hover { background-color: rgba(0,0,0,0.04) !important; }
-
-  /* API Key Modal Styles */
-  #${UI_IDS.apiKeyModal} {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-  }
-  #${UI_IDS.apiKeyModalContent} {
-    background: #1c1c1e;
-    padding: 24px;
-    border-radius: 12px;
-    width: 360px;
-    box-sizing: border-box;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-  }
-  #${UI_IDS.apiKeyModalHeader} {
-    display: flex;
-    align-items: center;
-    margin-bottom: 20px;
-  }
-  #${UI_IDS.apiKeyModalHeader} > div:first-child { /* Icon container */
-    color: #c62a88;
-    margin-right: 12px;
-  }
-  #${UI_IDS.apiKeyModalHeader} > div:last-child { /* Title container */
-    font-size: 22px;
-    font-weight: 600;
-    color: #fff;
-  }
-  #${UI_IDS.apiKeyModalDescription} {
-    color: #999;
-    font-size: 14px;
-    margin-bottom: 16px;
-  }
-  #${UI_IDS.apiKeyInput} {
-    width: 100%;
-    padding: 12px;
-    margin-bottom: 16px;
-    box-sizing: border-box;
-    background: #2a2a2c;
-    color: #fff;
-    border: 1px solid #333;
-    border-radius: 6px;
-    outline: none;
-    font-size: 14px;
-  }
-  #${UI_IDS.apiKeyShowLabelContainer} {
-    display: flex;
-    align-items: center;
-    margin-bottom: 20px;
-    color: #ccc;
-  }
-  #${UI_IDS.apiKeyShowCheckbox} {
-    margin-right: 8px;
-    accent-color: #c62a88;
-  }
-  #${UI_IDS.apiKeyShowLabelContainer} label {
-    font-size: 14px;
-  }
-  #${UI_IDS.apiKeySaveButton} {
-    width: 100%;
-    padding: 12px;
-    background: #a02553;
-    border: none;
-    border-radius: 6px;
-    color: white;
-    cursor: pointer;
-    font-size: 15px;
-    font-weight: 500;
-    transition: all 0.2s ease;
-  }
-  #${UI_IDS.apiKeySaveButton}:hover {
-    background-color: #c62a88;
-  }
-  /* Exa Config Modal Styles */
-  #${UI_IDS.exaConfigModal} {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000; /* Ensure it's above other modals */
-  }
-  #${UI_IDS.exaConfigModalContent} {
-    background: #1c1c1e; /* Dark background from image */
-    padding: 24px;
-    border-radius: 12px;
-    width: 400px;
-    box-sizing: border-box;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-    color: #fff;
-  }
-  #${UI_IDS.exaConfigModalHeader} { /* Using the specific ID */
-    font-size: 20px;
-    font-weight: 600;
-    margin-bottom: 8px;
-  }
-  #${UI_IDS.exaConfigModalDescription} { /* Using the specific ID */
-    color: #aaa;
-    font-size: 14px;
-    margin-bottom: 24px;
-  }
-  .exa-config-slider-container {
-    margin-bottom: 20px;
-  }
-  .exa-config-slider-container label {
-    display: block;
-    font-size: 14px;
-    color: #ccc;
-    margin-bottom: 10px;
-  }
-  .exa-config-slider-container .slider-wrapper {
-    display: flex;
-    align-items: center;
-  }
-  .exa-config-slider-container input[type="range"] {
-    flex-grow: 1;
-    margin-right: 15px;
-    -webkit-appearance: none;
-    appearance: none;
-    height: 8px;
-    background: #444; /* Slider track color */
-    border-radius: 4px;
-    outline: none;
-  }
-  .exa-config-slider-container input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 18px;
-    height: 18px;
-    background: #c62a88; /* Slider thumb color (magenta) */
-    border-radius: 50%;
-    cursor: pointer;
-    border: 2px solid #1c1c1e; /* Thumb border to match modal bg */
-  }
-  .exa-config-slider-container input[type="range"]::-moz-range-thumb {
-    width: 18px; /* For Firefox */
-    height: 18px;
-    background: #c62a88;
-    border-radius: 50%;
-    cursor: pointer;
-    border: 2px solid #1c1c1e;
-  }
-  .exa-config-slider-container .value-display {
-    display: inline-block;
-    width: 30px; /* Increased width for two digits */
-    text-align: right;
-    font-size: 14px;
-    color: #fff;
-  }
-  .exa-config-buttons {
-    margin-top: 30px;
-    display: flex;
-    justify-content: flex-end; /* Align buttons to the right */
-    gap: 12px; /* Space between buttons */
-  }
-  .exa-config-button { /* General button style */
-    padding: 10px 20px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 15px;
-    font-weight: 500;
-    transition: background-color 0.2s ease;
-  }
-  #${UI_IDS.exaConfigCloseButton} {
-    background-color: #4a4a4f; /* Darker grey for Close */
-    color: #ddd;
-  }
-  #${UI_IDS.exaConfigCloseButton}:hover {
-    background-color: #5a5a5f;
-  }
-  #${UI_IDS.exaConfigSaveButton} {
-    background-color: #a02553; /* Original save button color */
-    color: white;
-  }
-  #${UI_IDS.exaConfigSaveButton}:hover {
-    background-color: #c62a88; /* Original save button hover */
-  }
-
-  /* Perplexity Config Modal Styles (Mirroring Exa's for base visibility) */
-  #${UI_IDS.perplexityConfigModal} {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000; /* Ensure it's above other modals */
-  }
-  #${UI_IDS.perplexityConfigModalContent} {
-    background: #1c1c1e; /* Dark background */
-    padding: 24px;
-    border-radius: 12px;
-    width: 400px; /* Same width as Exa's */
-    box-sizing: border-box;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-    color: #fff;
-  }
-  #${UI_IDS.perplexityConfigModalHeader} { /* Unique ID for Perplexity header */
-    font-size: 20px;
-    font-weight: 600;
-    margin-bottom: 8px;
-  }
-  #${UI_IDS.perplexityConfigModalDescription} { /* Unique ID for Perplexity description */
-    color: #aaa;
-    font-size: 14px;
-    margin-bottom: 24px;
-  }
-  /* Perplexity Config Save Button - Match Exa's colors */
-  #${UI_IDS.perplexityConfigSaveButton} {
-    background-color: #a02553; /* Same as Exa save button color */
-    color: white;
-  }
-  #${UI_IDS.perplexityConfigSaveButton}:hover {
-    background-color: #c62a88; /* Same as Exa save button hover */
-  }
-  /* Note: Slider and button styles within Perplexity modal re-use existing .exa-config- classes */
-
-  /* Tooltip styles for search button */
-  #search-toggle {
-    position: relative !important;
-    overflow: visible !important;
-  }
-  .search-tooltip {
-    display: inline-block !important; /* Auto-fit width to content */
-    position: absolute !important;
-    bottom: 35px !important; /* Move tooltip downwards */
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    background: #000 !important;
-    color: #fff !important;
-    padding: 8px 12px !important;
-    border-radius: 6px !important;
-    font-size: 12px !important;
-    white-space: nowrap !important;
-    opacity: 0 !important;
-    visibility: hidden !important;
-    transition: all 0.2s ease !important;
-    z-index: 99999 !important;
-    pointer-events: none !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
-  }
-  .search-tooltip::after {
-    content: '' !important;
-    position: absolute !important;
-    top: 100% !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: 0 !important;
-    height: 0 !important;
-    border-left: 6px solid transparent !important;
-    border-right: 6px solid transparent !important;
-    border-top: 6px solid #000 !important;
-  }
-  #search-toggle:hover .search-tooltip {
-    opacity: 1 !important;
-    visibility: visible !important;
-  }
-  /* Hide tooltip arrow */
-  .search-tooltip::after {
-    display: none !important;
-  }
-            `;
-            document.head.appendChild(styleEl);
+    class ReactLikeComponent {
+        constructor(props = {}) {
+            this.props = props;
+            this.state = {};
+            this.element = null;
+            this.children = [];
+            this.events = {};
+            this.isMounted = false;
         }
-    };
 
-    // --- Core: API Key Modal ---
-    const ApiKeyModal = {
-        _isShown: false,
-        show: async () => {
-            if (document.getElementById(UI_IDS.apiKeyModal) || ApiKeyModal._isShown) return;
-            ApiKeyModal._isShown = true;
+        setState(newState, callback) {
+            const prevState = { ...this.state };
+            this.state = { ...this.state, ...newState };
 
-            // Ensure current provider is loaded before showing
-            selectedApiProvider = await GM_getValue(GM_STORAGE_KEYS.SELECTED_API_PROVIDER, API_PROVIDERS.EXA);
-            const currentExaKey = await GM_getValue(GM_STORAGE_KEYS.API_KEY_EXA, '');
-            const currentPerplexityKey = await GM_getValue(GM_STORAGE_KEYS.API_KEY_PERPLEXITY, '');
+            if (this.isMounted) {
+                this.componentDidUpdate(this.props, prevState);
+                this.render();
+            }
 
-            const wrapper = document.createElement('div');
-            wrapper.id = UI_IDS.apiKeyModal;
-            wrapper.innerHTML = `
-      <div id="${UI_IDS.apiKeyModalContent}">
-        <div id="${UI_IDS.apiKeyModalHeader}">
-          <div><!-- Icon container -->
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
-            </svg>
-          </div>
-          <div>Enter API Key</div><!-- Title -->
-        </div>
-        <div id="${UI_IDS.apiKeyModalDescription}">Select your API provider and set the API Key to enable web search functionality.</div>
-        <div style="margin-bottom: 16px;">
-            <label for="${UI_IDS.apiProviderSelect}" style="display: block; margin-bottom: 8px; color: #ccc; font-size: 14px;">API Provider:</label>
-            <select id="${UI_IDS.apiProviderSelect}" style="width: 100%; padding: 12px; background: #2a2a2c; color: #fff; border: 1px solid #333; border-radius: 6px; font-size: 14px;">
-                <option value="${API_PROVIDERS.EXA}" ${selectedApiProvider === API_PROVIDERS.EXA ? 'selected' : ''}>Exa API</option>
-                <option value="${API_PROVIDERS.PERPLEXITY}" ${selectedApiProvider === API_PROVIDERS.PERPLEXITY ? 'selected' : ''}>Perplexity API</option>
-            </select>
-        </div>
-        <input id="${UI_IDS.apiKeyInput}" type="password" placeholder="Enter your API Key" value="${selectedApiProvider === API_PROVIDERS.EXA ? currentExaKey : currentPerplexityKey}" />
-        <div id="${UI_IDS.apiKeyShowLabelContainer}">
-          <input id="${UI_IDS.apiKeyShowCheckbox}" type="checkbox" />
-          <label for="${UI_IDS.apiKeyShowCheckbox}">Show API Key</label>
-        </div>
-        <button id="${UI_IDS.apiKeySaveButton}">Save Settings</button>
-      </div>`;
-            document.body.appendChild(wrapper);
-            ApiKeyModal._attachEventListeners(wrapper);
-        },
-        _attachEventListeners: (modalElement) => {
-            const keyInput = modalElement.querySelector(`#${UI_IDS.apiKeyInput}`);
-            const showCheckbox = modalElement.querySelector(`#${UI_IDS.apiKeyShowCheckbox}`);
-            const saveButton = modalElement.querySelector(`#${UI_IDS.apiKeySaveButton}`);
-            const providerSelect = modalElement.querySelector(`#${UI_IDS.apiProviderSelect}`);
+            if (callback && typeof callback === 'function') {
+                callback();
+            }
+        }
 
-            providerSelect.addEventListener('change', async (e) => {
-                const newProvider = e.target.value;
-                keyInput.value = newProvider === API_PROVIDERS.EXA
-                    ? await GM_getValue(GM_STORAGE_KEYS.API_KEY_EXA, '')
-                    : await GM_getValue(GM_STORAGE_KEYS.API_KEY_PERPLEXITY, '');
-                keyInput.placeholder = `Enter your ${newProvider === API_PROVIDERS.EXA ? 'Exa' : 'Perplexity'} API Key`;
+        mount(parentElement) {
+            if (!this.isMounted) {
+                this.componentWillMount();
+                this.isMounted = true;
+                this.render();
+                if (parentElement && this.element) {
+                    parentElement.appendChild(this.element);
+                }
+                this.componentDidMount();
+            }
+        }
+
+        unmount() {
+            if (this.isMounted) {
+                this.componentWillUnmount();
+                if (this.element && this.element.parentNode) {
+                    this.element.parentNode.removeChild(this.element);
+                }
+                this.isMounted = false;
+            }
+        }
+
+        // Lifecycle methods (to be overridden)
+        componentWillMount() {}
+        componentDidMount() {}
+        componentWillUnmount() {}
+        componentDidUpdate(prevProps, prevState) {}
+
+        // Event handling
+        addEventListener(element, event, handler) {
+            if (element && handler) {
+                element.addEventListener(event, handler);
+                if (!this.events[event]) this.events[event] = [];
+                this.events[event].push({ element, handler });
+            }
+        }
+
+        removeAllEventListeners() {
+            Object.keys(this.events).forEach(event => {
+                this.events[event].forEach(({ element, handler }) => {
+                    element.removeEventListener(event, handler);
+                });
             });
+            this.events = {};
+        }
 
-            showCheckbox.addEventListener('change', (e) => {
-                keyInput.type = e.target.checked ? 'text' : 'password';
-            });
+        // DOM creation helper
+        createElement(tag, attributes = {}, innerHTML = '') {
+            const element = document.createElement(tag);
 
-            saveButton.addEventListener('click', async () => {
-                const key = keyInput.value.trim();
-                const currentProvider = providerSelect.value;
-
-                if (key) {
-                    if (currentProvider === API_PROVIDERS.EXA) {
-                        await GM_setValue(GM_STORAGE_KEYS.API_KEY_EXA, key);
-                        exaApiKey = key;
-                    } else if (currentProvider === API_PROVIDERS.PERPLEXITY) {
-                        await GM_setValue(GM_STORAGE_KEYS.API_KEY_PERPLEXITY, key);
-                        perplexityApiKey = key;
-                    }
-                    await GM_setValue(GM_STORAGE_KEYS.SELECTED_API_PROVIDER, currentProvider);
-                    selectedApiProvider = currentProvider;
-
-                    modalElement.remove();
-                    ApiKeyModal._isShown = false;
-                    location.reload();
+            Object.keys(attributes).forEach(key => {
+                if (key === 'className') {
+                    element.className = attributes[key];
+                } else if (key === 'style' && typeof attributes[key] === 'object') {
+                    Object.assign(element.style, attributes[key]);
                 } else {
-                    alert('API Key cannot be empty for the selected provider.');
+                    element.setAttribute(key, attributes[key]);
                 }
             });
+
+            if (innerHTML) {
+                element.innerHTML = innerHTML;
+            }
+
+            return element;
+        }
+
+        // Abstract render method
+        render() {
+            throw new Error('render() method must be implemented');
+        }
+    }
+
+    // ==================== State Management ====================
+
+    class StateManager {
+        constructor() {
+            this.state = {};
+            this.subscribers = [];
+        }
+
+        getState() {
+            return { ...this.state };
+        }
+
+        setState(newState) {
+            this.state = { ...this.state, ...newState };
+            this.notifySubscribers();
+        }
+
+        subscribe(callback) {
+            this.subscribers.push(callback);
+            return () => {
+                this.subscribers = this.subscribers.filter(sub => sub !== callback);
+            };
+        }
+
+        notifySubscribers() {
+            this.subscribers.forEach(callback => callback(this.state));
+        }
+    }
+
+    // ==================== Constants and Configuration ====================
+
+    const CONFIG = {
+        SCRIPT_NAME: "t3.chat Inject Search Toggle (with Exa & Perplexity API)",
+        SCRIPT_VERSION: "0.5",
+
+        API_PROVIDERS: {
+            EXA: 'exa',
+            PERPLEXITY: 'perplexity'
+        },
+
+        DEFAULTS: {
+            EXA_NUM_RESULTS: 5,
+            EXA_SUBPAGES: 2,
+            EXA_LINKS: 3,
+            EXA_IMAGE_LINKS: 0,
+            PERPLEXITY_MODEL: 'sonar',
+            PERPLEXITY_TEMPERATURE: 0.7,
+            PERPLEXITY_MAX_TOKENS: 512,
+            PERPLEXITY_TOP_P: 1,
+            PERPLEXITY_TOP_K: 0,
+            PERPLEXITY_PRESENCE_PENALTY: 0,
+            PERPLEXITY_FREQUENCY_PENALTY: 0
+        },
+
+        STORAGE_KEYS: {
+            SELECTED_API_PROVIDER: 'selectedApiProvider',
+            API_KEY_EXA: 'exaApiKey',
+            EXA_NUM_RESULTS: 'exaNumResults',
+            EXA_SUBPAGES: 'exaSubpages',
+            EXA_LINKS: 'exaLinks',
+            EXA_IMAGE_LINKS: 'exaImageLinks',
+            API_KEY_PERPLEXITY: 'perplexityApiKey',
+            PERPLEXITY_MODEL: 'perplexityModel',
+            PERPLEXITY_TEMPERATURE: 'perplexityTemperature',
+            PERPLEXITY_MAX_TOKENS: 'perplexityMaxTokens',
+            PERPLEXITY_TOP_P: 'perplexityTopP',
+            PERPLEXITY_TOP_K: 'perplexityTopK',
+            PERPLEXITY_PRESENCE_PENALTY: 'perplexityPresencePenalty',
+            PERPLEXITY_FREQUENCY_PENALTY: 'perplexityFrequencyPenalty'
+        },
+
+        API: {
+            exaEndpoint: 'https://api.exa.ai/search',
+            perplexityEndpoint: 'https://api.perplexity.ai/chat/completions',
+            conversationContextEnabled: true,
+            apiRequestTimeout: 300000
+        },
+
+        SELECTORS: {
+            justifyDiv: 'div.mt-2.flex-row-reverse.justify-between',
+            modelTempSection: 'div.flex.flex-col',
+            mlGroup: 'div.ml-\\[-7px\\]',
+            chatLogContainer: 'div[role="log"][aria-label="Chat messages"]',
+            mainContentArea: 'main',
+            chatArea: '.chat'
+        },
+
+        CSS_CLASSES: {
+            button: "inline-flex items-center justify-center whitespace-nowrap font-medium transition-colors focus-visible:outline-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 disabled:cursor-not-allowed hover:text-foreground disabled:hover:bg-transparent disabled:hover:text-foreground/50 px-3 text-xs -mb-1.5 h-auto gap-2 rounded-full border border-solid border-secondary-foreground/10 py-1.5 pl-2 pr-2.5 text-muted-foreground max-sm:p-2",
+            searchToggleLoading: 'loading',
+            searchToggleOn: 'on'
         }
     };
 
-    // --- Core: Exa Configuration Modal ---
-    const ExaConfigModal = {
-        _isShown: false,
-        _modalElement: null,
+    // ==================== Global State ====================
 
-        SLIDER_CONFIG: [
-            { storageKey: GM_STORAGE_KEYS.EXA_NUM_RESULTS, label: 'Search Results Count (0-99):', min: 0, max: 99, defaultValue: DEFAULT_EXA_NUM_RESULTS, sliderId: UI_IDS.numResultsSlider, valueId: UI_IDS.numResultsValue },
-            { storageKey: GM_STORAGE_KEYS.EXA_SUBPAGES, label: 'Subpages Count (0-10):', min: 0, max: 10, defaultValue: DEFAULT_EXA_SUBPAGES, sliderId: UI_IDS.subpagesSlider, valueId: UI_IDS.subpagesValue },
-            { storageKey: GM_STORAGE_KEYS.EXA_LINKS, label: 'Links Count (0-10):', min: 0, max: 10, defaultValue: DEFAULT_EXA_LINKS, sliderId: UI_IDS.linksSlider, valueId: UI_IDS.linksValue },
-            { storageKey: GM_STORAGE_KEYS.EXA_IMAGE_LINKS, label: 'Image Links Count (0-10):', min: 0, max: 10, defaultValue: DEFAULT_EXA_IMAGE_LINKS, sliderId: UI_IDS.imageLinksSlider, valueId: UI_IDS.imageLinksValue }
-        ],
+    const globalState = new StateManager();
 
-        show: async function() {
-            if (this._isShown || document.getElementById(UI_IDS.exaConfigModal)) return;
-            this._isShown = true;
+    // Initialize global state
+    globalState.setState({
+        selectedApiProvider: CONFIG.API_PROVIDERS.EXA,
+        exaApiKey: null,
+        perplexityApiKey: null,
+        exaNumResults: CONFIG.DEFAULTS.EXA_NUM_RESULTS,
+        exaSubpages: CONFIG.DEFAULTS.EXA_SUBPAGES,
+        exaLinks: CONFIG.DEFAULTS.EXA_LINKS,
+        exaImageLinks: CONFIG.DEFAULTS.EXA_IMAGE_LINKS,
+        perplexityModel: CONFIG.DEFAULTS.PERPLEXITY_MODEL,
+        perplexityTemperature: CONFIG.DEFAULTS.PERPLEXITY_TEMPERATURE,
+        perplexityMaxTokens: CONFIG.DEFAULTS.PERPLEXITY_MAX_TOKENS,
+        perplexityTopP: CONFIG.DEFAULTS.PERPLEXITY_TOP_P,
+        perplexityTopK: CONFIG.DEFAULTS.PERPLEXITY_TOP_K,
+        perplexityPresencePenalty: CONFIG.DEFAULTS.PERPLEXITY_PRESENCE_PENALTY,
+        perplexityFrequencyPenalty: CONFIG.DEFAULTS.PERPLEXITY_FREQUENCY_PENALTY,
+        searchToggleState: false,
+        isLoading: false
+    });
 
-            const wrapper = document.createElement('div');
-            wrapper.id = UI_IDS.exaConfigModal;
+    // ==================== Utility Components ====================
 
-            let slidersHtml = '';
-            for (const config of this.SLIDER_CONFIG) {
-                const currentValue = await GM_getValue(config.storageKey, config.defaultValue);
-                slidersHtml += `
-                    <div class="exa-config-slider-container">
-                        <label for="${config.sliderId}">${config.label}</label>
-                        <div class="slider-wrapper">
-                            <input type="range" id="${config.sliderId}" name="${config.storageKey}" min="${config.min}" max="${config.max}" value="${currentValue}">
-                            <span id="${config.valueId}" class="value-display">${currentValue}</span>
-                        </div>
-                    </div>
-                `;
-            }
+    class StyleManager extends ReactLikeComponent {
+        render() {
+            if (document.getElementById('t3chat-search-style')) return;
 
-            wrapper.innerHTML = `
-                <div id="${UI_IDS.exaConfigModalContent}">
-                    <div id="${UI_IDS.exaConfigModalHeader}">Configure Exa Search</div>
-                    <div id="${UI_IDS.exaConfigModalDescription}">Adjust the parameters for Exa search requests.</div>
-                    ${slidersHtml}
-                    <div class="exa-config-buttons">
-                        <button id="${UI_IDS.exaConfigCloseButton}" class="exa-config-button">Close</button>
-                        <button id="${UI_IDS.exaConfigSaveButton}" class="exa-config-button">Save & Reload</button>
-                    </div>
-                </div>
+            const styleEl = this.createElement('style', { id: 't3chat-search-style' });
+            styleEl.textContent = `
+                /* Button toggle animation */
+                #search-toggle {
+                    position: relative !important;
+                    overflow: visible !important;
+                }
+                button#search-toggle.on,
+                #search-toggle[data-state="open"] {
+                    background-color: rgba(219,39,119,0.15) !important;
+                }
+                button#search-toggle.on:hover,
+                #search-toggle[data-state="open"]:hover {
+                    background-color: rgba(219,39,119,0.25) !important;
+                }
+                button#search-toggle:not(.on):hover {
+                    background-color: rgba(0,0,0,0.04) !important;
+                }
+
+                /* Modal Styles */
+                .api-modal {
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(0,0,0,0.7);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 9999;
+                }
+                .api-modal-content {
+                    background: #1c1c1e;
+                    padding: 24px;
+                    border-radius: 12px;
+                    width: 360px;
+                    box-sizing: border-box;
+                    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+                    color: #fff;
+                }
+                .api-modal-header {
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 20px;
+                    font-size: 22px;
+                    font-weight: 600;
+                }
+                .api-modal-description {
+                    color: #999;
+                    font-size: 14px;
+                    margin-bottom: 16px;
+                }
+                .api-input {
+                    width: 100%;
+                    padding: 12px;
+                    margin-bottom: 16px;
+                    box-sizing: border-box;
+                    background: #2a2a2c;
+                    color: #fff;
+                    border: 1px solid #333;
+                    border-radius: 6px;
+                    outline: none;
+                    font-size: 14px;
+                }
+                .api-button {
+                    width: 100%;
+                    padding: 12px;
+                    background: #a02553;
+                    border: none;
+                    border-radius: 6px;
+                    color: white;
+                    cursor: pointer;
+                    font-size: 15px;
+                    font-weight: 500;
+                    transition: all 0.2s ease;
+                }
+                .api-button:hover {
+                    background-color: #c62a88;
+                }
+
+                /* Tooltip styles */
+                .search-tooltip {
+                    position: absolute !important;
+                    bottom: 100% !important;
+                    left: 50% !important;
+                    transform: translateX(-50%) translateY(-8px) !important;
+                    background: #000 !important;
+                    color: #fff !important;
+                    padding: 6px 10px !important;
+                    border-radius: 4px !important;
+                    font-size: 12px !important;
+                    white-space: nowrap !important;
+                    opacity: 0 !important;
+                    visibility: hidden !important;
+                    transition: all 0.2s ease !important;
+                    z-index: 99999 !important;
+                    pointer-events: none !important;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+                }
+                #search-toggle:hover .search-tooltip {
+                    opacity: 1 !important;
+                    visibility: visible !important;
+                    transform: translateX(-50%) translateY(-8px) !important;
+                }
+
+                /* Config Modal Styles */
+                .config-modal {
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(0,0,0,0.7);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10000;
+                }
+                .config-modal-content {
+                    background: #1c1c1e;
+                    padding: 24px;
+                    border-radius: 12px;
+                    width: 400px;
+                    box-sizing: border-box;
+                    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+                    color: #fff;
+                }
+                .config-modal-header {
+                    font-size: 20px;
+                    font-weight: 600;
+                    margin-bottom: 8px;
+                }
+                .config-modal-description {
+                    color: #aaa;
+                    font-size: 14px;
+                    margin-bottom: 24px;
+                }
+                .config-slider-container {
+                    margin-bottom: 20px;
+                }
+                .config-slider-container label {
+                    display: block;
+                    font-size: 14px;
+                    color: #ccc;
+                    margin-bottom: 10px;
+                }
+                .config-slider-container .slider-wrapper {
+                    display: flex;
+                    align-items: center;
+                }
+                .config-slider-container input[type="range"] {
+                    flex-grow: 1;
+                    margin-right: 15px;
+                    -webkit-appearance: none;
+                    appearance: none;
+                    height: 8px;
+                    background: #444;
+                    border-radius: 4px;
+                    outline: none;
+                }
+                .config-slider-container input[type="range"]::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 18px;
+                    height: 18px;
+                    background: #c62a88;
+                    border-radius: 50%;
+                    cursor: pointer;
+                    border: 2px solid #1c1c1e;
+                }
+                .config-slider-container input[type="range"]::-moz-range-thumb {
+                    width: 18px;
+                    height: 18px;
+                    background: #c62a88;
+                    border-radius: 50%;
+                    cursor: pointer;
+                    border: 2px solid #1c1c1e;
+                }
+                .config-slider-container .value-display {
+                    display: inline-block;
+                    width: 30px;
+                    text-align: right;
+                    font-size: 14px;
+                    color: #fff;
+                }
+                .config-buttons {
+                    margin-top: 30px;
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 12px;
+                }
+                .config-button {
+                    padding: 10px 20px;
+                    border: none;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-size: 15px;
+                    font-weight: 500;
+                    transition: background-color 0.2s ease;
+                }
+                .config-close-button {
+                    background-color: #4a4a4f;
+                    color: #ddd;
+                }
+                .config-close-button:hover {
+                    background-color: #5a5a5f;
+                }
+                .config-save-button {
+                    background-color: #a02553;
+                    color: white;
+                }
+                .config-save-button:hover {
+                    background-color: #c62a88;
+                }
+
+                /* Searching Indicator */
+                .searching-indicator {
+                    position: fixed !important;
+                    z-index: 10000 !important;
+                    justify-content: center !important;
+                    whitespace-nowrap: true !important;
+                    font-weight: 500 !important;
+                    transition: all 0.2s ease !important;
+                    focus-visible:outline: none !important;
+                    focus-visible:ring: 1px solid transparent !important;
+                    disabled:opacity: 0.5 !important;
+                    disabled:cursor: not-allowed !important;
+                    disabled:hover:background: rgba(0,0,0,0.05) !important;
+                    height: 32px !important;
+                    padding: 0 12px !important;
+                    font-size: 12px !important;
+                    pointer-events: auto !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    gap: 8px !important;
+                    border-radius: 9999px !important;
+                    border: 1px solid !important;
+                    border-color: rgba(0,0,0,0.1) !important;
+                    background: var(--chat-overlay, rgba(255,255,255,0.8)) !important;
+                    color: white !important;
+                    backdrop-filter: blur(24px) !important;
+                    opacity: 0 !important;
+                    visibility: hidden !important;
+                    transform: translateX(-50%) translateY(-10px) !important;
+                    transition: all 0.2s ease !important;
+                }
+                .searching-indicator.show {
+                    opacity: 1 !important;
+                    visibility: visible !important;
+                    transform: translateX(-50%) translateY(0px) !important;
+                }
+                .searching-indicator:hover {
+                    background: rgba(0,0,0,0.05) !important;
+                }
+                .searching-indicator .dots {
+                    font-weight: bold !important;
+                    min-width: 24px !important;
+                    text-align: left !important;
+                }
             `;
-            document.body.appendChild(wrapper);
-            this._modalElement = wrapper;
-            this._attachEventListeners();
-        },
 
-        hide: function() {
-            if (this._modalElement) {
-                this._modalElement.remove();
-                this._modalElement = null;
-            }
-            this._isShown = false;
-        },
+            document.head.appendChild(styleEl);
+            this.element = styleEl;
+        }
+    }
 
-        _attachEventListeners: function() {
-            if (!this._modalElement) return;
+    // ==================== API Service Components ====================
 
-            this.SLIDER_CONFIG.forEach(config => {
-                const slider = this._modalElement.querySelector(`#${config.sliderId}`);
-                const valueDisplay = this._modalElement.querySelector(`#${config.valueId}`);
-                if (slider && valueDisplay) {
-                    slider.addEventListener('input', (e) => {
-                        valueDisplay.textContent = e.target.value;
-                    });
-                }
+    class APIService extends ReactLikeComponent {
+        constructor(props) {
+            super(props);
+            this.state = globalState.getState();
+
+            // Subscribe to global state changes
+            this.unsubscribe = globalState.subscribe((newState) => {
+                this.setState(newState);
             });
+        }
 
-            const closeButton = this._modalElement.querySelector(`#${UI_IDS.exaConfigCloseButton}`);
-            if (closeButton) {
-                closeButton.addEventListener('click', () => this.hide());
-            }
-
-            const saveButton = this._modalElement.querySelector(`#${UI_IDS.exaConfigSaveButton}`);
-            if (saveButton) {
-                saveButton.addEventListener('click', async () => {
-                    for (const config of this.SLIDER_CONFIG) {
-                        const slider = this._modalElement.querySelector(`#${config.sliderId}`);
-                        if (slider) {
-                            const value = parseInt(slider.value, 10);
-                            await GM_setValue(config.storageKey, value);
-                            // Update live global variables immediately
-                            if (config.storageKey === GM_STORAGE_KEYS.EXA_NUM_RESULTS) exaNumResults = value;
-                            else if (config.storageKey === GM_STORAGE_KEYS.EXA_SUBPAGES) exaSubpages = value;
-                            else if (config.storageKey === GM_STORAGE_KEYS.EXA_LINKS) exaLinks = value;
-                            else if (config.storageKey === GM_STORAGE_KEYS.EXA_IMAGE_LINKS) exaImageLinks = value;
-                        }
-                    }
-                    this.hide();
-                    location.reload();
-                });
+        componentWillUnmount() {
+            if (this.unsubscribe) {
+                this.unsubscribe();
             }
         }
-    };
 
-    // --- Core: Perplexity Configuration Modal ---
-    const PerplexityConfigModal = {
-        _isShown: false,
-        _modalElement: null,
+        async callExaAPI(prompt, contextMessages = []) {
+            const { exaApiKey, exaNumResults, exaSubpages, exaLinks, exaImageLinks } = this.state;
 
-        CONFIG_ITEMS: [
-            {
-                type: 'select', storageKey: GM_STORAGE_KEYS.PERPLEXITY_MODEL, label: 'Model:', defaultValue: DEFAULT_PERPLEXITY_MODEL, selectId: UI_IDS.perplexityModelSelect,
-                options: [
-                    { value: 'sonar', text: 'sonar'},
-                    { value: 'sonar-pro', text: 'sonar-pro'},
-                    { value: 'sonar-deep-research', text: 'sonar-deep-research'},
-                    { value: 'sonar-reasoning', text: 'sonar-reasoning'},
-                    { value: 'sonar-reasoning-pro', text: 'sonar-reasoning-pro'},
-                ]
-            },
-            { type: 'slider', storageKey: GM_STORAGE_KEYS.PERPLEXITY_TEMPERATURE, label: 'Temperature (0.0-2.0):', min: 0, max: 2, step: 0.1, defaultValue: DEFAULT_PERPLEXITY_TEMPERATURE, sliderId: UI_IDS.perplexityTemperatureSlider, valueId: UI_IDS.perplexityTemperatureValue },
-            { type: 'slider', storageKey: GM_STORAGE_KEYS.PERPLEXITY_MAX_TOKENS, label: 'Max Tokens (1-4096):', min: 1, max: 4096, step: 1, defaultValue: DEFAULT_PERPLEXITY_MAX_TOKENS, sliderId: UI_IDS.perplexityMaxTokensSlider, valueId: UI_IDS.perplexityMaxTokensValue },
-            { type: 'slider', storageKey: GM_STORAGE_KEYS.PERPLEXITY_TOP_P, label: 'Top P (0.0-1.0):', min: 0, max: 1, step: 0.01, defaultValue: DEFAULT_PERPLEXITY_TOP_P, sliderId: UI_IDS.perplexityTopPSlider, valueId: UI_IDS.perplexityTopPValue },
-            { type: 'slider', storageKey: GM_STORAGE_KEYS.PERPLEXITY_TOP_K, label: 'Top K (0-200, 0 to disable):', min: 0, max: 200, step: 1, defaultValue: DEFAULT_PERPLEXITY_TOP_K, sliderId: UI_IDS.perplexityTopKSlider, valueId: UI_IDS.perplexityTopKValue },
-            { type: 'slider', storageKey: GM_STORAGE_KEYS.PERPLEXITY_PRESENCE_PENALTY, label: 'Presence Penalty (0.0-2.0):', min: 0, max: 2, step: 0.1, defaultValue: DEFAULT_PERPLEXITY_PRESENCE_PENALTY, sliderId: UI_IDS.perplexityPresencePenaltySlider, valueId: UI_IDS.perplexityPresencePenaltyValue },
-            { type: 'slider', storageKey: GM_STORAGE_KEYS.PERPLEXITY_FREQUENCY_PENALTY, label: 'Frequency Penalty (0.0-2.0):', min: 0, max: 2, step: 0.1, defaultValue: DEFAULT_PERPLEXITY_FREQUENCY_PENALTY, sliderId: UI_IDS.perplexityFrequencyPenaltySlider, valueId: UI_IDS.perplexityFrequencyPenaltyValue }
-        ],
-
-        show: async function() {
-            if (this._isShown || document.getElementById(UI_IDS.perplexityConfigModal)) return;
-            this._isShown = true;
-
-            const wrapper = document.createElement('div');
-            wrapper.id = UI_IDS.perplexityConfigModal; // Use the correct ID for Perplexity modal
-
-            let controlsHtml = '';
-            for (const config of this.CONFIG_ITEMS) {
-                const currentValue = await GM_getValue(config.storageKey, config.defaultValue);
-                if (config.type === 'slider') {
-                    controlsHtml += `
-                        <div class="exa-config-slider-container"> <!-- Re-use exa styling for sliders -->
-                            <label for="${config.sliderId}">${config.label}</label>
-                            <div class="slider-wrapper">
-                                <input type="range" id="${config.sliderId}" name="${config.storageKey}" min="${config.min}" max="${config.max}" step="${config.step || 1}" value="${currentValue}">
-                                <span id="${config.valueId}" class="value-display">${currentValue}</span>
-                            </div>
-                        </div>
-                    `;
-                } else if (config.type === 'select') {
-                    controlsHtml += `
-                        <div class="exa-config-slider-container"> <!-- Re-use exa styling -->
-                            <label for="${config.selectId}">${config.label}</label>
-                            <select id="${config.selectId}" name="${config.storageKey}" style="width: 100%; padding: 10px; background: #2a2a2c; color: #fff; border: 1px solid #333; border-radius: 6px; font-size: 14px;">
-                                ${config.options.map(opt => `<option value="${opt.value}" ${currentValue === opt.value ? 'selected' : ''}>${opt.text}</option>`).join('')}
-                            </select>
-                        </div>
-                    `;
-                }
-            }
-
-            wrapper.innerHTML = `
-                <div id="${UI_IDS.perplexityConfigModalContent}"> <!-- Use perplexity specific ID -->
-                    <div id="${UI_IDS.perplexityConfigModalHeader}">Configure Perplexity AI</div>
-                    <div id="${UI_IDS.perplexityConfigModalDescription}">Adjust parameters for Perplexity AI requests.</div>
-                    ${controlsHtml}
-                    <div class="exa-config-buttons">
-                        <button id="${UI_IDS.perplexityConfigCloseButton}" class="exa-config-button">Close</button>
-                        <button id="${UI_IDS.perplexityConfigSaveButton}" class="exa-config-button">Save & Reload</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(wrapper);
-            this._modalElement = wrapper;
-            this._attachEventListeners();
-        },
-
-        hide: function() {
-            if (this._modalElement) {
-                this._modalElement.remove();
-                this._modalElement = null;
-            }
-            this._isShown = false;
-        },
-
-        _attachEventListeners: function() {
-            if (!this._modalElement) return;
-
-            this.CONFIG_ITEMS.forEach(config => {
-                if (config.type === 'slider') {
-                    const slider = this._modalElement.querySelector(`#${config.sliderId}`);
-                    const valueDisplay = this._modalElement.querySelector(`#${config.valueId}`);
-                    if (slider && valueDisplay) {
-                        slider.addEventListener('input', (e) => {
-                            valueDisplay.textContent = e.target.value;
-                        });
-                    }
-                }
-                // No event listener needed for select on input, value is read on save.
-            });
-
-            const closeButton = this._modalElement.querySelector(`#${UI_IDS.perplexityConfigCloseButton}`);
-            if (closeButton) {
-                closeButton.addEventListener('click', () => this.hide());
-            }
-
-            const saveButton = this._modalElement.querySelector(`#${UI_IDS.perplexityConfigSaveButton}`);
-            if (saveButton) {
-                saveButton.addEventListener('click', async () => {
-                    for (const config of this.CONFIG_ITEMS) {
-                        let value;
-                        if (config.type === 'slider') {
-                            const slider = this._modalElement.querySelector(`#${config.sliderId}`);
-                            if (slider) {
-                                value = config.step && config.step < 1 ? parseFloat(slider.value) : parseInt(slider.value, 10);
-                            }
-                        } else if (config.type === 'select') {
-                            const select = this._modalElement.querySelector(`#${config.selectId}`);
-                            if (select) {
-                                value = select.value;
-                            }
-                        }
-
-                        if (value !== undefined) {
-                            await GM_setValue(config.storageKey, value);
-                            // Update live global variables immediately
-                            if (config.storageKey === GM_STORAGE_KEYS.PERPLEXITY_MODEL) perplexityModel = value;
-                            else if (config.storageKey === GM_STORAGE_KEYS.PERPLEXITY_TEMPERATURE) perplexityTemperature = value;
-                            else if (config.storageKey === GM_STORAGE_KEYS.PERPLEXITY_MAX_TOKENS) perplexityMaxTokens = value;
-                            else if (config.storageKey === GM_STORAGE_KEYS.PERPLEXITY_TOP_P) perplexityTopP = value;
-                            else if (config.storageKey === GM_STORAGE_KEYS.PERPLEXITY_TOP_K) perplexityTopK = value;
-                            else if (config.storageKey === GM_STORAGE_KEYS.PERPLEXITY_PRESENCE_PENALTY) perplexityPresencePenalty = value;
-                            else if (config.storageKey === GM_STORAGE_KEYS.PERPLEXITY_FREQUENCY_PENALTY) perplexityFrequencyPenalty = value;
-                        }
-                    }
-                    this.hide();
-                    location.reload();
-                });
-            }
-        }
-    };
-
-    // --- Core: Exa API Interaction ---
-    const ExaAPI = {
-        call: async (prompt, contextMessages = []) => {
             if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
                 return null;
             }
             if (!exaApiKey) {
-                ApiKeyModal.show(); // Show the generic API key modal
                 return null;
             }
 
-            // Full-featured request body with configurable counts
             const requestBody = {
                 query: prompt,
                 type: "auto",
                 numResults: exaNumResults,
                 contents: {
                     text: { includeHtmlTags: false },
-                    livecrawl: "always", // WARNING: "always" can be expensive. Check Exa API docs for alternatives like "cached" or if it can be omitted/made conditional.
+                    livecrawl: "always",
                     summary: {},
                     subpages: exaSubpages,
                     extras: {
@@ -808,59 +549,61 @@
                 }
             };
 
-
             return new Promise((resolve) => {
                 let isResolved = false;
                 const req = GM_xmlhttpRequest({
                     method: "POST",
-                    url: API_CONFIG.exaEndpoint, // Using the updated /search endpoint
-                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${exaApiKey}` },
-                    data: JSON.stringify(requestBody), // Using the new comprehensive request body
+                    url: CONFIG.API.exaEndpoint,
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${exaApiKey}`
+                    },
+                    data: JSON.stringify(requestBody),
                     onload(res) {
                         if (isResolved) return;
                         clearTimeout(timeoutId);
                         isResolved = true;
-                        let data = JSON.parse(res.responseText);
 
-                        // Handle response from /search endpoint
-                        // It returns an object with a "results" array.
-                        if (res.status >= 200 && res.status < 300 && data && Array.isArray(data.results)) {
-                            if (data.results.length === 0) {
-                                resolve(null); // Or a message indicating no results
+                        try {
+                            let data = JSON.parse(res.responseText);
+                            if (res.status >= 200 && res.status < 300 && data && Array.isArray(data.results)) {
+                                if (data.results.length === 0) {
+                                    resolve(null);
+                                } else {
+                                    let combinedText = "";
+                                    let urlList = [];
+
+                                    for (const result of data.results) {
+                                        if (result.title && result.url) {
+                                            combinedText += `Title: [${result.title}](${result.url})\n`;
+                                            urlList.push(`- [${result.title}](${result.url})`);
+                                        } else if (result.title) {
+                                            combinedText += `Title: ${result.title}\n`;
+                                        }
+                                        if (result.url && !result.title) {
+                                            combinedText += `URL: [${result.url}](${result.url})\n`;
+                                            urlList.push(`- [${result.url}](${result.url})`);
+                                        }
+                                        if (result.text) combinedText += `Text: ${result.text}\n`;
+                                        if (result.summary) combinedText += `Summary: ${result.summary}\n`;
+                                        combinedText += '---\n';
+                                    }
+
+                                    if (urlList.length > 0) {
+                                        combinedText += '\n**Related Links:**\n';
+                                        combinedText += urlList.join('\n') + '\n';
+                                    }
+
+                                    resolve(combinedText.trim());
+                                }
                             } else {
-                                let combinedText = "";
-                                let urlList = []; // Collect all links
-                                for (const result of data.results) {
-                                    if (result.title && result.url) {
-                                        combinedText += `Title: [${result.title}](${result.url})\n`;
-                                        urlList.push(`- [${result.title}](${result.url})`);
-                                    } else if (result.title) {
-                                        combinedText += `Title: ${result.title}\n`;
-                                    }
-                                    if (result.url && !result.title) {
-                                        combinedText += `URL: [${result.url}](${result.url})\n`;
-                                        urlList.push(`- [${result.url}](${result.url})`);
-                                    }
-                                    // Text content is directly in result.text if requested via contents.text
-                                    if (result.text) combinedText += `Text: ${result.text}\n`;
-                                    // Summary is directly in result.summary if requested via contents.summary
-                                    if (result.summary) combinedText += `Summary: ${result.summary}\n`;
-                                    combinedText += '---\n';
-                                }
-
-                                // Add all links list at the end of results
-                                if (urlList.length > 0) {
-                                    combinedText += '\n**Related Links:**\n';
-                                    combinedText += urlList.join('\n') + '\n';
-                                }
-
-                                resolve(combinedText.trim());
+                                resolve(null);
                             }
-                        } else {
+                        } catch (error) {
                             resolve(null);
                         }
                     },
-                    onerror(err) {
+                    onerror() {
                         if (isResolved) return;
                         clearTimeout(timeoutId);
                         isResolved = true;
@@ -872,29 +615,32 @@
                         resolve(null);
                     }
                 });
+
                 const timeoutId = setTimeout(() => {
                     if (isResolved) return;
                     isResolved = true;
                     if (req && typeof req.abort === 'function') req.abort();
                     resolve(null);
-                }, API_CONFIG.apiRequestTimeout);
+                }, CONFIG.API.apiRequestTimeout);
             });
         }
-    };
 
-    // --- Core: Perplexity API Interaction ---
-    const PerplexityAPI = {
-        call: async (prompt, contextMessages = []) => {
+        async callPerplexityAPI(prompt, contextMessages = []) {
+            const {
+                perplexityApiKey, perplexityModel, perplexityTemperature,
+                perplexityMaxTokens, perplexityTopP, perplexityTopK,
+                perplexityPresencePenalty, perplexityFrequencyPenalty
+            } = this.state;
+
             if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
                 return null;
             }
             if (!perplexityApiKey) {
-                ApiKeyModal.show();
                 return null;
             }
 
             const messages = [{ role: "system", content: "Be precise and concise." }];
-            if (API_CONFIG.conversationContextEnabled && contextMessages && contextMessages.length > 0) {
+            if (CONFIG.API.conversationContextEnabled && contextMessages && contextMessages.length > 0) {
                 messages.push(...contextMessages.map(m => ({ role: m.role, content: m.content })).filter(m => m.content));
             }
             messages.push({ role: "user", content: prompt });
@@ -905,54 +651,55 @@
                 temperature: perplexityTemperature,
                 max_tokens: perplexityMaxTokens,
                 top_p: perplexityTopP,
+                presence_penalty: perplexityPresencePenalty,
+                frequency_penalty: perplexityFrequencyPenalty
             };
+
             if (perplexityTopK > 0) {
                 requestBody.top_k = perplexityTopK;
             }
 
-
             return new Promise((resolve) => {
                 let isResolved = false;
-                const req = GM_xmlhttpRequest({
+                GM_xmlhttpRequest({
                     method: "POST",
-                    url: API_CONFIG.perplexityEndpoint,
+                    url: CONFIG.API.perplexityEndpoint,
                     headers: {
                         "Content-Type": "application/json",
                         "Authorization": `Bearer ${perplexityApiKey}`
                     },
                     data: JSON.stringify(requestBody),
-                    timeout: API_CONFIG.apiRequestTimeout, // GM_xmlhttpRequest uses timeout directly
+                    timeout: CONFIG.API.apiRequestTimeout,
                     onload(res) {
                         if (isResolved) return;
                         isResolved = true;
-                        // Handle non-2xx statuses before parsing JSON (avoid HTML error pages)
+
                         if (res.status < 200 || res.status >= 300) {
-                            // If unauthorized, prompt for API key
-                            if (res.status === 401) {
-                                ApiKeyModal.show();
-                            }
                             return resolve(null);
                         }
-                        let data = JSON.parse(res.responseText);
 
+                        try {
+                            let data = JSON.parse(res.responseText);
+                            if (data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
+                                let content = data.choices[0].message.content;
+                                const citations = data.citations || [];
+                                let linksSection = '';
 
-                        if (res.status >= 200 && res.status < 300 && data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
-                            let content = data.choices[0].message.content;
+                                if (Array.isArray(citations) && citations.length > 0) {
+                                    const uniqueUrls = [...new Set(citations.filter(url => typeof url === 'string' && url))];
+                                    linksSection = '\n\n**Citations:**\n' + uniqueUrls.map(url => `- [${url}](${url})`).join('\n');
+                                }
 
-                            // Use API-provided citations for links
-                            const citations = data.citations || [];
-                            let linksSection = '';
-                            if (Array.isArray(citations) && citations.length > 0) {
-                                const uniqueUrls = [...new Set(citations.filter(url => typeof url === 'string' && url))];
-                                linksSection = '\n\n**Citations:**\n' + uniqueUrls.map(url => `- [${url}](${url})`).join('\n');
+                                const combinedText = `Source: Perplexity AI (${perplexityModel})\nContent: ${content}${linksSection}`;
+                                resolve(combinedText.trim());
+                            } else {
+                                resolve(null);
                             }
-                            const combinedText = `Source: Perplexity AI (${perplexityModel})\nContent: ${content}${linksSection}`;
-                            resolve(combinedText.trim());
-                        } else {
+                        } catch (error) {
                             resolve(null);
                         }
                     },
-                    onerror(err) {
+                    onerror() {
                         if (isResolved) return;
                         isResolved = true;
                         resolve(null);
@@ -963,290 +710,966 @@
                         resolve(null);
                     }
                 });
-
             });
         }
-    };
 
-    // --- Core: UI Manager (Search Toggle Button) ---
-    const UIManager = {
-        searchToggleButton: null,
-        _createSearchToggleButton: async () => {
-            const btn = document.createElement("button");
-            btn.id = UI_IDS.searchToggle;
-            btn.type = "button";
-            btn.setAttribute("aria-label", "Enable search");
-            btn.setAttribute("data-state", "closed");
-            
-            // Get current API provider and model name for tooltip
-            const currentProvider = await GM_getValue(GM_STORAGE_KEYS.SELECTED_API_PROVIDER, API_PROVIDERS.EXA);
-            let modelName = 'Exa API';
-            if (currentProvider === API_PROVIDERS.PERPLEXITY) {
-                const currentModel = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_MODEL, DEFAULT_PERPLEXITY_MODEL);
-                modelName = currentModel;
+        render() {
+            // This is a service component, no rendering needed
+        }
+    }
+
+    // ==================== UI Components ====================
+
+    class SearchToggle extends ReactLikeComponent {
+        constructor(props) {
+            super(props);
+            this.state = globalState.getState();
+
+            this.unsubscribe = globalState.subscribe((newState) => {
+                this.setState(newState);
+            });
+        }
+
+        componentWillUnmount() {
+            if (this.unsubscribe) {
+                this.unsubscribe();
             }
-            
+            this.removeAllEventListeners();
+        }
+
+        componentDidMount() {
+            // Restore toggle state from unsafeWindow if it exists
+            if (typeof unsafeWindow !== 'undefined' && unsafeWindow.t3ChatSearch && unsafeWindow.t3ChatSearch.needSearch) {
+                globalState.setState({ searchToggleState: true });
+            }
+            this.updateButtonState();
+        }
+
+        async handleToggleClick() {
+            const { selectedApiProvider, exaApiKey, perplexityApiKey } = this.state;
+
+            let apiKeyMissing = false;
+            if (selectedApiProvider === CONFIG.API_PROVIDERS.EXA && !exaApiKey) {
+                apiKeyMissing = true;
+            } else if (selectedApiProvider === CONFIG.API_PROVIDERS.PERPLEXITY && !perplexityApiKey) {
+                apiKeyMissing = true;
+            }
+
+            if (apiKeyMissing) {
+                const modal = new APIKeyModal();
+                modal.mount(document.body);
+                return;
+            }
+
+            const newToggleState = !this.state.searchToggleState;
+
+            // Update global state
+            globalState.setState({ searchToggleState: newToggleState });
+
+            // Update local state immediately for instant visual feedback
+            this.setState({ searchToggleState: newToggleState }, () => {
+                // Force update the button state after local state change
+                this.updateButtonState();
+            });
+
+            if (typeof unsafeWindow !== 'undefined') {
+                if (!unsafeWindow.t3ChatSearch) {
+                    unsafeWindow.t3ChatSearch = {};
+                }
+                unsafeWindow.t3ChatSearch.needSearch = newToggleState;
+            }
+        }
+
+        componentDidUpdate(prevProps, prevState) {
+            // Update button classes when state changes
+            if (this.element && (
+                prevState.searchToggleState !== this.state.searchToggleState ||
+                prevState.selectedApiProvider !== this.state.selectedApiProvider ||
+                prevState.perplexityModel !== this.state.perplexityModel
+            )) {
+                this.updateButtonState();
+            }
+        }
+
+        updateButtonState() {
+            if (!this.element) return;
+
+            const { searchToggleState, selectedApiProvider, perplexityModel } = this.state;
+
+            // Clear only state-specific classes, preserve base classes
+            this.element.classList.remove('on');
+
+            // Add state classes and apply styles
+            if (searchToggleState) {
+                this.element.classList.add('on');
+                // Remove inline styles and rely on CSS for 'on' state
+                this.element.style.backgroundColor = '';
+                this.element.style.borderColor = '';
+                this.element.style.color = '';
+            } else {
+                // Reset to default styles when not 'on'
+                this.element.style.backgroundColor = '';
+                this.element.style.borderColor = '';
+                this.element.style.color = '';
+            }
+
+            // Set data-mode attribute as shown in the example
+            this.element.setAttribute('data-mode', searchToggleState ? 'on' : 'off');
+
+            // Ensure button has relative positioning for tooltip
+            this.element.style.position = 'relative';
+            this.element.style.overflow = 'visible';
+
+            // Update aria attributes
+            this.element.setAttribute('aria-label', searchToggleState ? 'Disable search' : 'Enable search');
+            this.element.setAttribute('data-state', searchToggleState ? 'open' : 'closed');
+
+            // Update tooltip content
+            const tooltip = this.element.querySelector('.search-tooltip');
+            if (tooltip) {
+                let modelName = 'Exa API';
+                if (selectedApiProvider === CONFIG.API_PROVIDERS.PERPLEXITY) {
+                    modelName = perplexityModel;
+                }
+                tooltip.textContent = modelName;
+            }
+        }
+
+        render() {
+            const { selectedApiProvider, perplexityModel, searchToggleState } = this.state;
+
+            // Remove existing element if it exists
+            if (this.element && this.element.parentNode) {
+                this.element.parentNode.removeChild(this.element);
+            }
+
+            const btn = this.createElement('button', {
+                id: 'search-toggle',
+                type: 'button',
+                'aria-label': searchToggleState ? 'Disable search' : 'Enable search',
+                'data-state': searchToggleState ? 'open' : 'closed',
+                'data-mode': searchToggleState ? 'on' : 'off',
+                className: CONFIG.CSS_CLASSES.button,
+                style: {
+                    position: 'relative',
+                    overflow: 'visible'
+                }
+            });
+
+            let modelName = 'Exa API';
+            if (selectedApiProvider === CONFIG.API_PROVIDERS.PERPLEXITY) {
+                modelName = perplexityModel;
+            }
+
             btn.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe h-4 w-4 scale-x-[-1]">
-        <circle cx="12" cy="12" r="10"></circle>
-        <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
-        <path d="M2 12h20"></path>
-      </svg>
-      <span class="max-sm:hidden">Search</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe h-4 w-4 scale-x-[-1]">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+                    <path d="M2 12h20"></path>
+                </svg>
+                <span class="max-sm:hidden">Search</span>
             `;
-            btn.className = CSS_CLASSES.button;
-            btn.style.position = 'relative';
-            btn.dataset.mode = "off";
-            
-            // Create and add tooltip element
-            const tooltip = document.createElement('div');
-            tooltip.className = 'search-tooltip';
+
+            const tooltip = this.createElement('div', {
+                className: 'search-tooltip'
+            });
             tooltip.textContent = modelName;
             btn.appendChild(tooltip);
 
-            btn.addEventListener("click", async () => {
-                // Ensure API keys and provider are loaded/refreshed before toggle logic
-                selectedApiProvider = await GM_getValue(GM_STORAGE_KEYS.SELECTED_API_PROVIDER, API_PROVIDERS.EXA);
-                exaApiKey = await GM_getValue(GM_STORAGE_KEYS.API_KEY_EXA);
-                perplexityApiKey = await GM_getValue(GM_STORAGE_KEYS.API_KEY_PERPLEXITY);
+            this.addEventListener(btn, 'click', () => this.handleToggleClick());
 
-                let apiKeyMissing = false;
-                if (selectedApiProvider === API_PROVIDERS.EXA && !exaApiKey) {
-                    apiKeyMissing = true;
-                } else if (selectedApiProvider === API_PROVIDERS.PERPLEXITY && !perplexityApiKey) {
-                    apiKeyMissing = true;
-                }
+            this.element = btn;
 
-                if (apiKeyMissing) {
-                    ApiKeyModal.show();
-                    return;
-                }
+            // Apply initial state immediately
+            this.updateButtonState();
+        }
+    }
 
-                const isOn = btn.classList.toggle(CSS_CLASSES.searchToggleOn);
-                btn.setAttribute("aria-label", isOn ? "Disable search" : "Enable search");
-                btn.setAttribute("data-state", isOn ? "open" : "closed");
-                if (typeof unsafeWindow !== 'undefined' && unsafeWindow.t3ChatSearch) {
-                    unsafeWindow.t3ChatSearch.needSearch = isOn;
-                }
+    class SearchingIndicator extends ReactLikeComponent {
+        constructor(props) {
+            super(props);
+            this.state = globalState.getState();
+            this.targetElement = null;
+            this.dotsInterval = null;
+
+            this.unsubscribe = globalState.subscribe((newState) => {
+                this.setState(newState);
             });
-            // Preserve toggle state across UI re-renders
-            if (typeof unsafeWindow !== 'undefined' && unsafeWindow.t3ChatSearch && unsafeWindow.t3ChatSearch.needSearch) {
-                btn.classList.add(CSS_CLASSES.searchToggleOn);
-                btn.setAttribute("aria-label", "Disable search");
-                btn.setAttribute("data-state", "open");
-                btn.dataset.mode = "on";
-            }
-            return btn;
-        },
-        injectSearchToggle: async () => {
-            const justifyDiv = document.querySelector(SELECTORS.justifyDiv);
-            if (!justifyDiv) {
-                return false;
-            }
-            const modelTempSection = justifyDiv.querySelector(SELECTORS.modelTempSection);
-            if (!modelTempSection) {
-                return false;
-            }
-            const mlGroup = modelTempSection.querySelector(SELECTORS.mlGroup);
-            if (!mlGroup) {
-                return false;
-            }
+        }
 
-            const existingBtn = mlGroup.querySelector(`#${UI_IDS.searchToggle}`);
-            if (existingBtn) {
-                if (mlGroup.lastElementChild !== existingBtn) {
-                    mlGroup.appendChild(existingBtn); // Ensure it's the last child
-                }
-                UIManager.searchToggleButton = existingBtn; // Store reference
-                return true;
+        componentWillUnmount() {
+            if (this.unsubscribe) {
+                this.unsubscribe();
             }
+            if (this.dotsInterval) {
+                clearInterval(this.dotsInterval);
+            }
+            this.removeAllEventListeners();
+        }
 
-            UIManager.searchToggleButton = await UIManager._createSearchToggleButton();
-            mlGroup.appendChild(UIManager.searchToggleButton);
-            return true;
-        },
-        updateSearchToggleLoadingState: (isLoading) => {
-            if (UIManager.searchToggleButton) {
-                if (isLoading) {
-                    UIManager.searchToggleButton.classList.add(CSS_CLASSES.searchToggleLoading);
-                } else {
-                    UIManager.searchToggleButton.classList.remove(CSS_CLASSES.searchToggleLoading);
-                }
+        componentDidUpdate(prevProps, prevState) {
+            if (prevState.isLoading !== this.state.isLoading) {
+                this.updateDisplay();
             }
         }
-    };
 
-    // --- Core: Fetch Interception ---
-    const FetchInterceptor = {
-        originalFetch: null,
-        init: () => {
+        componentDidMount() {
+            // 添加滾動和窗口大小變化監聽器
+            this.addEventListener(window, 'scroll', () => {
+                if (this.state.isLoading) {
+                    this.positionIndicator();
+                }
+            });
+
+            this.addEventListener(window, 'resize', () => {
+                if (this.state.isLoading) {
+                    this.positionIndicator();
+                }
+            });
+        }
+
+        mount(parentElement) {
+            // Override mount to not require parentElement since we append to body
+            if (!this.isMounted) {
+                this.componentWillMount();
+                this.isMounted = true;
+                this.render();
+                this.componentDidMount();
+            }
+        }
+
+        findTargetElement() {
+            // 查找指定的容器元素 - 使用更簡單的選擇器
+            let chatInputContainer = document.querySelector('div.border-reflect');
+            if (!chatInputContainer) {
+                // 備用選擇器 - 查找包含聊天輸入框的form
+                chatInputContainer = document.querySelector('form textarea[name="input"]')?.closest('div');
+            }
+            if (!chatInputContainer) {
+                // 最後的備用選擇器
+                chatInputContainer = document.querySelector('textarea[id*="chat-input"]')?.closest('div.bg-\\[--chat-input-background\\]');
+            }
+            return chatInputContainer;
+        }
+
+        startDotsAnimation() {
+            // 清理現有的interval
+            if (this.dotsInterval) {
+                clearInterval(this.dotsInterval);
+                this.dotsInterval = null;
+            }
+
+            const dotsElement = this.element?.querySelector('.dots');
+            if (!dotsElement) {
+                console.log('Dots element not found');
+                return;
+            }
+
+            let dotsCount = 0;
+            // 立即設置初始狀態
+            dotsElement.textContent = '';
+
+            this.dotsInterval = setInterval(() => {
+                dotsCount = (dotsCount + 1) % 4; // 1, 2, 3, 0
+                const dots = '.'.repeat(dotsCount);
+                dotsElement.textContent = dots;
+            }, 500);
+        }
+
+        stopDotsAnimation() {
+            if (this.dotsInterval) {
+                clearInterval(this.dotsInterval);
+                this.dotsInterval = null;
+            }
+        }
+
+        updateDisplay() {
+            if (!this.element) return;
+
+            this.targetElement = this.findTargetElement();
+            if (!this.targetElement) return;
+
+            if (this.state.isLoading) {
+                this.positionIndicator();
+                this.element.classList.add('show');
+                this.startDotsAnimation();
+            } else {
+                this.element.classList.remove('show');
+                this.stopDotsAnimation();
+            }
+        }
+
+        positionIndicator() {
+            if (!this.targetElement || !this.element) return;
+
+            const rect = this.targetElement.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const topY = rect.top - 40; // 40px above the target element
+
+            this.element.style.left = centerX + 'px';
+            this.element.style.top = topY + 'px';
+        }
+
+        render() {
+            // 清理現有的元素
+            const existingIndicator = document.getElementById('searching-indicator');
+            if (existingIndicator) {
+                existingIndicator.remove();
+            }
+
+            const indicator = this.createElement('div', {
+                className: 'searching-indicator',
+                id: 'searching-indicator'
+            });
+
+            indicator.innerHTML = `
+                <span class="pb-0.5">Searching<span class="dots"></span></span>
+            `;
+
+            this.element = indicator;
+
+            // 添加到document.body以便使用fixed定位
+            document.body.appendChild(indicator);
+
+            this.updateDisplay();
+        }
+    }
+
+    class APIKeyModal extends ReactLikeComponent {
+        constructor(props) {
+            super(props);
+            this.state = globalState.getState();
+
+            this.unsubscribe = globalState.subscribe((newState) => {
+                this.setState(newState);
+            });
+        }
+
+        componentWillUnmount() {
+            if (this.unsubscribe) {
+                this.unsubscribe();
+            }
+            this.removeAllEventListeners();
+        }
+
+        async handleSave() {
+            const keyInput = this.element.querySelector('#api-key-input');
+            const providerSelect = this.element.querySelector('#api-provider-select');
+
+            const key = keyInput.value.trim();
+            const currentProvider = providerSelect.value;
+
+            if (key) {
+                if (currentProvider === CONFIG.API_PROVIDERS.EXA) {
+                    await GM_setValue(CONFIG.STORAGE_KEYS.API_KEY_EXA, key);
+                    globalState.setState({ exaApiKey: key });
+                } else if (currentProvider === CONFIG.API_PROVIDERS.PERPLEXITY) {
+                    await GM_setValue(CONFIG.STORAGE_KEYS.API_KEY_PERPLEXITY, key);
+                    globalState.setState({ perplexityApiKey: key });
+                }
+
+                await GM_setValue(CONFIG.STORAGE_KEYS.SELECTED_API_PROVIDER, currentProvider);
+                globalState.setState({ selectedApiProvider: currentProvider });
+
+                this.unmount();
+                location.reload();
+            } else {
+                alert('API Key cannot be empty for the selected provider.');
+            }
+        }
+
+        handleProviderChange(e) {
+            const newProvider = e.target.value;
+            const keyInput = this.element.querySelector('#api-key-input');
+
+            if (newProvider === CONFIG.API_PROVIDERS.EXA) {
+                keyInput.value = this.state.exaApiKey || '';
+            } else {
+                keyInput.value = this.state.perplexityApiKey || '';
+            }
+            keyInput.placeholder = `Enter your ${newProvider === CONFIG.API_PROVIDERS.EXA ? 'Exa' : 'Perplexity'} API Key`;
+        }
+
+        handleShowCheckbox(e) {
+            const keyInput = this.element.querySelector('#api-key-input');
+            keyInput.type = e.target.checked ? 'text' : 'password';
+        }
+
+        render() {
+            const { selectedApiProvider, exaApiKey, perplexityApiKey } = this.state;
+
+            const wrapper = this.createElement('div', {
+                className: 'api-modal'
+            });
+
+            const currentKey = selectedApiProvider === CONFIG.API_PROVIDERS.EXA ? (exaApiKey || '') : (perplexityApiKey || '');
+
+            wrapper.innerHTML = `
+                <div class="api-modal-content">
+                    <div class="api-modal-header">
+                        <div style="color: #c62a88; margin-right: 12px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
+                            </svg>
+                        </div>
+                        <div>Enter API Key</div>
+                    </div>
+                    <div class="api-modal-description">Select your API provider and set the API Key to enable web search functionality.</div>
+                    <div style="margin-bottom: 16px;">
+                        <label for="api-provider-select" style="display: block; margin-bottom: 8px; color: #ccc; font-size: 14px;">API Provider:</label>
+                        <select id="api-provider-select" class="api-input">
+                            <option value="${CONFIG.API_PROVIDERS.EXA}" ${selectedApiProvider === CONFIG.API_PROVIDERS.EXA ? 'selected' : ''}>Exa API</option>
+                            <option value="${CONFIG.API_PROVIDERS.PERPLEXITY}" ${selectedApiProvider === CONFIG.API_PROVIDERS.PERPLEXITY ? 'selected' : ''}>Perplexity API</option>
+                        </select>
+                    </div>
+                    <input id="api-key-input" type="password" class="api-input" placeholder="Enter your API Key" value="${currentKey}" />
+                    <div style="display: flex; align-items: center; margin-bottom: 20px; color: #ccc;">
+                        <input id="api-key-show" type="checkbox" style="margin-right: 8px; accent-color: #c62a88;" />
+                        <label for="api-key-show" style="font-size: 14px;">Show API Key</label>
+                    </div>
+                    <button id="api-key-save" class="api-button">Save Settings</button>
+                </div>
+            `;
+
+            // Attach event listeners
+            const providerSelect = wrapper.querySelector('#api-provider-select');
+            const showCheckbox = wrapper.querySelector('#api-key-show');
+            const saveButton = wrapper.querySelector('#api-key-save');
+
+            this.addEventListener(providerSelect, 'change', (e) => this.handleProviderChange(e));
+            this.addEventListener(showCheckbox, 'change', (e) => this.handleShowCheckbox(e));
+            this.addEventListener(saveButton, 'click', () => this.handleSave());
+
+            this.element = wrapper;
+        }
+    }
+
+    class ExaConfigModal extends ReactLikeComponent {
+        constructor(props) {
+            super(props);
+            this.state = globalState.getState();
+
+            this.unsubscribe = globalState.subscribe((newState) => {
+                this.setState(newState);
+            });
+
+            this.SLIDER_CONFIG = [
+                { storageKey: CONFIG.STORAGE_KEYS.EXA_NUM_RESULTS, label: 'Search Results Count (0-99):', min: 0, max: 99, defaultValue: CONFIG.DEFAULTS.EXA_NUM_RESULTS, sliderId: 'exa-num-results-slider', valueId: 'exa-num-results-value' },
+                { storageKey: CONFIG.STORAGE_KEYS.EXA_SUBPAGES, label: 'Subpages Count (0-10):', min: 0, max: 10, defaultValue: CONFIG.DEFAULTS.EXA_SUBPAGES, sliderId: 'exa-subpages-slider', valueId: 'exa-subpages-value' },
+                { storageKey: CONFIG.STORAGE_KEYS.EXA_LINKS, label: 'Links Count (0-10):', min: 0, max: 10, defaultValue: CONFIG.DEFAULTS.EXA_LINKS, sliderId: 'exa-links-slider', valueId: 'exa-links-value' },
+                { storageKey: CONFIG.STORAGE_KEYS.EXA_IMAGE_LINKS, label: 'Image Links Count (0-10):', min: 0, max: 10, defaultValue: CONFIG.DEFAULTS.EXA_IMAGE_LINKS, sliderId: 'exa-image-links-slider', valueId: 'exa-image-links-value' }
+            ];
+        }
+
+        componentWillUnmount() {
+            if (this.unsubscribe) {
+                this.unsubscribe();
+            }
+            this.removeAllEventListeners();
+        }
+
+        async handleSave() {
+            for (const config of this.SLIDER_CONFIG) {
+                const slider = this.element.querySelector(`#${config.sliderId}`);
+                if (slider) {
+                    const value = parseInt(slider.value, 10);
+                    await GM_setValue(config.storageKey, value);
+
+                    // Update global state
+                    if (config.storageKey === CONFIG.STORAGE_KEYS.EXA_NUM_RESULTS) globalState.setState({ exaNumResults: value });
+                    else if (config.storageKey === CONFIG.STORAGE_KEYS.EXA_SUBPAGES) globalState.setState({ exaSubpages: value });
+                    else if (config.storageKey === CONFIG.STORAGE_KEYS.EXA_LINKS) globalState.setState({ exaLinks: value });
+                    else if (config.storageKey === CONFIG.STORAGE_KEYS.EXA_IMAGE_LINKS) globalState.setState({ exaImageLinks: value });
+                }
+            }
+            this.unmount();
+            location.reload();
+        }
+
+        handleSliderInput(sliderId, valueId) {
+            const slider = this.element.querySelector(`#${sliderId}`);
+            const valueDisplay = this.element.querySelector(`#${valueId}`);
+            if (slider && valueDisplay) {
+                valueDisplay.textContent = slider.value;
+            }
+        }
+
+        render() {
+            const wrapper = this.createElement('div', {
+                className: 'config-modal'
+            });
+
+            let slidersHtml = '';
+            for (const config of this.SLIDER_CONFIG) {
+                let currentValue = config.defaultValue;
+
+                // Get current value from state based on storage key
+                if (config.storageKey === CONFIG.STORAGE_KEYS.EXA_NUM_RESULTS) currentValue = this.state.exaNumResults;
+                else if (config.storageKey === CONFIG.STORAGE_KEYS.EXA_SUBPAGES) currentValue = this.state.exaSubpages;
+                else if (config.storageKey === CONFIG.STORAGE_KEYS.EXA_LINKS) currentValue = this.state.exaLinks;
+                else if (config.storageKey === CONFIG.STORAGE_KEYS.EXA_IMAGE_LINKS) currentValue = this.state.exaImageLinks;
+
+                slidersHtml += `
+                    <div class="config-slider-container">
+                        <label for="${config.sliderId}">${config.label}</label>
+                        <div class="slider-wrapper">
+                            <input type="range" id="${config.sliderId}" name="${config.storageKey}" min="${config.min}" max="${config.max}" value="${currentValue}">
+                            <span id="${config.valueId}" class="value-display">${currentValue}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            wrapper.innerHTML = `
+                <div class="config-modal-content">
+                    <div class="config-modal-header">Configure Exa Search</div>
+                    <div class="config-modal-description">Adjust the parameters for Exa search requests.</div>
+                    ${slidersHtml}
+                    <div class="config-buttons">
+                        <button id="exa-config-close" class="config-button config-close-button">Close</button>
+                        <button id="exa-config-save" class="config-button config-save-button">Save & Reload</button>
+                    </div>
+                </div>
+            `;
+
+            // Attach event listeners
+            this.SLIDER_CONFIG.forEach(config => {
+                const slider = wrapper.querySelector(`#${config.sliderId}`);
+                if (slider) {
+                    this.addEventListener(slider, 'input', () => this.handleSliderInput(config.sliderId, config.valueId));
+                }
+            });
+
+            const closeButton = wrapper.querySelector('#exa-config-close');
+            const saveButton = wrapper.querySelector('#exa-config-save');
+
+            this.addEventListener(closeButton, 'click', () => this.unmount());
+            this.addEventListener(saveButton, 'click', () => this.handleSave());
+
+            this.element = wrapper;
+        }
+    }
+
+    class PerplexityConfigModal extends ReactLikeComponent {
+        constructor(props) {
+            super(props);
+            this.state = globalState.getState();
+
+            this.unsubscribe = globalState.subscribe((newState) => {
+                this.setState(newState);
+            });
+
+            this.CONFIG_ITEMS = [
+                {
+                    type: 'select',
+                    storageKey: CONFIG.STORAGE_KEYS.PERPLEXITY_MODEL,
+                    label: 'Model:',
+                    defaultValue: CONFIG.DEFAULTS.PERPLEXITY_MODEL,
+                    selectId: 'perplexity-model-select',
+                    options: [
+                        { value: 'sonar', text: 'sonar'},
+                        { value: 'sonar-pro', text: 'sonar-pro'},
+                        { value: 'sonar-deep-research', text: 'sonar-deep-research'},
+                        { value: 'sonar-reasoning', text: 'sonar-reasoning'},
+                        { value: 'sonar-reasoning-pro', text: 'sonar-reasoning-pro'},
+                    ]
+                },
+                { type: 'slider', storageKey: CONFIG.STORAGE_KEYS.PERPLEXITY_TEMPERATURE, label: 'Temperature (0.0-2.0):', min: 0, max: 2, step: 0.1, defaultValue: CONFIG.DEFAULTS.PERPLEXITY_TEMPERATURE, sliderId: 'perplexity-temperature-slider', valueId: 'perplexity-temperature-value' },
+                { type: 'slider', storageKey: CONFIG.STORAGE_KEYS.PERPLEXITY_MAX_TOKENS, label: 'Max Tokens (1-4096):', min: 1, max: 4096, step: 1, defaultValue: CONFIG.DEFAULTS.PERPLEXITY_MAX_TOKENS, sliderId: 'perplexity-max-tokens-slider', valueId: 'perplexity-max-tokens-value' },
+                { type: 'slider', storageKey: CONFIG.STORAGE_KEYS.PERPLEXITY_TOP_P, label: 'Top P (0.0-1.0):', min: 0, max: 1, step: 0.01, defaultValue: CONFIG.DEFAULTS.PERPLEXITY_TOP_P, sliderId: 'perplexity-top-p-slider', valueId: 'perplexity-top-p-value' },
+                { type: 'slider', storageKey: CONFIG.STORAGE_KEYS.PERPLEXITY_TOP_K, label: 'Top K (0-200, 0 to disable):', min: 0, max: 200, step: 1, defaultValue: CONFIG.DEFAULTS.PERPLEXITY_TOP_K, sliderId: 'perplexity-top-k-slider', valueId: 'perplexity-top-k-value' },
+                { type: 'slider', storageKey: CONFIG.STORAGE_KEYS.PERPLEXITY_PRESENCE_PENALTY, label: 'Presence Penalty (0.0-2.0):', min: 0, max: 2, step: 0.1, defaultValue: CONFIG.DEFAULTS.PERPLEXITY_PRESENCE_PENALTY, sliderId: 'perplexity-presence-penalty-slider', valueId: 'perplexity-presence-penalty-value' },
+                { type: 'slider', storageKey: CONFIG.STORAGE_KEYS.PERPLEXITY_FREQUENCY_PENALTY, label: 'Frequency Penalty (0.0-2.0):', min: 0, max: 2, step: 0.1, defaultValue: CONFIG.DEFAULTS.PERPLEXITY_FREQUENCY_PENALTY, sliderId: 'perplexity-frequency-penalty-slider', valueId: 'perplexity-frequency-penalty-value' }
+            ];
+        }
+
+        componentWillUnmount() {
+            if (this.unsubscribe) {
+                this.unsubscribe();
+            }
+            this.removeAllEventListeners();
+        }
+
+        async handleSave() {
+            for (const config of this.CONFIG_ITEMS) {
+                let value;
+                if (config.type === 'slider') {
+                    const slider = this.element.querySelector(`#${config.sliderId}`);
+                    if (slider) {
+                        value = config.step && config.step < 1 ? parseFloat(slider.value) : parseInt(slider.value, 10);
+                    }
+                } else if (config.type === 'select') {
+                    const select = this.element.querySelector(`#${config.selectId}`);
+                    if (select) {
+                        value = select.value;
+                    }
+                }
+
+                if (value !== undefined) {
+                    await GM_setValue(config.storageKey, value);
+
+                    // Update global state
+                    if (config.storageKey === CONFIG.STORAGE_KEYS.PERPLEXITY_MODEL) globalState.setState({ perplexityModel: value });
+                    else if (config.storageKey === CONFIG.STORAGE_KEYS.PERPLEXITY_TEMPERATURE) globalState.setState({ perplexityTemperature: value });
+                    else if (config.storageKey === CONFIG.STORAGE_KEYS.PERPLEXITY_MAX_TOKENS) globalState.setState({ perplexityMaxTokens: value });
+                    else if (config.storageKey === CONFIG.STORAGE_KEYS.PERPLEXITY_TOP_P) globalState.setState({ perplexityTopP: value });
+                    else if (config.storageKey === CONFIG.STORAGE_KEYS.PERPLEXITY_TOP_K) globalState.setState({ perplexityTopK: value });
+                    else if (config.storageKey === CONFIG.STORAGE_KEYS.PERPLEXITY_PRESENCE_PENALTY) globalState.setState({ perplexityPresencePenalty: value });
+                    else if (config.storageKey === CONFIG.STORAGE_KEYS.PERPLEXITY_FREQUENCY_PENALTY) globalState.setState({ perplexityFrequencyPenalty: value });
+                }
+            }
+            this.unmount();
+            location.reload();
+        }
+
+        handleSliderInput(sliderId, valueId) {
+            const slider = this.element.querySelector(`#${sliderId}`);
+            const valueDisplay = this.element.querySelector(`#${valueId}`);
+            if (slider && valueDisplay) {
+                valueDisplay.textContent = slider.value;
+            }
+        }
+
+        render() {
+            const wrapper = this.createElement('div', {
+                className: 'config-modal'
+            });
+
+            let controlsHtml = '';
+            for (const config of this.CONFIG_ITEMS) {
+                let currentValue = config.defaultValue;
+
+                // Get current value from state based on storage key
+                if (config.storageKey === CONFIG.STORAGE_KEYS.PERPLEXITY_MODEL) currentValue = this.state.perplexityModel;
+                else if (config.storageKey === CONFIG.STORAGE_KEYS.PERPLEXITY_TEMPERATURE) currentValue = this.state.perplexityTemperature;
+                else if (config.storageKey === CONFIG.STORAGE_KEYS.PERPLEXITY_MAX_TOKENS) currentValue = this.state.perplexityMaxTokens;
+                else if (config.storageKey === CONFIG.STORAGE_KEYS.PERPLEXITY_TOP_P) currentValue = this.state.perplexityTopP;
+                else if (config.storageKey === CONFIG.STORAGE_KEYS.PERPLEXITY_TOP_K) currentValue = this.state.perplexityTopK;
+                else if (config.storageKey === CONFIG.STORAGE_KEYS.PERPLEXITY_PRESENCE_PENALTY) currentValue = this.state.perplexityPresencePenalty;
+                else if (config.storageKey === CONFIG.STORAGE_KEYS.PERPLEXITY_FREQUENCY_PENALTY) currentValue = this.state.perplexityFrequencyPenalty;
+
+                if (config.type === 'slider') {
+                    controlsHtml += `
+                        <div class="config-slider-container">
+                            <label for="${config.sliderId}">${config.label}</label>
+                            <div class="slider-wrapper">
+                                <input type="range" id="${config.sliderId}" name="${config.storageKey}" min="${config.min}" max="${config.max}" step="${config.step || 1}" value="${currentValue}">
+                                <span id="${config.valueId}" class="value-display">${currentValue}</span>
+                            </div>
+                        </div>
+                    `;
+                } else if (config.type === 'select') {
+                    controlsHtml += `
+                        <div class="config-slider-container">
+                            <label for="${config.selectId}">${config.label}</label>
+                            <select id="${config.selectId}" name="${config.storageKey}" class="api-input">
+                                ${config.options.map(opt => `<option value="${opt.value}" ${currentValue === opt.value ? 'selected' : ''}>${opt.text}</option>`).join('')}
+                            </select>
+                        </div>
+                    `;
+                }
+            }
+
+            wrapper.innerHTML = `
+                <div class="config-modal-content">
+                    <div class="config-modal-header">Configure Perplexity AI</div>
+                    <div class="config-modal-description">Adjust parameters for Perplexity AI requests.</div>
+                    ${controlsHtml}
+                    <div class="config-buttons">
+                        <button id="perplexity-config-close" class="config-button config-close-button">Close</button>
+                        <button id="perplexity-config-save" class="config-button config-save-button">Save & Reload</button>
+                    </div>
+                </div>
+            `;
+
+            // Attach event listeners
+            this.CONFIG_ITEMS.forEach(config => {
+                if (config.type === 'slider') {
+                    const slider = wrapper.querySelector(`#${config.sliderId}`);
+                    if (slider) {
+                        this.addEventListener(slider, 'input', () => this.handleSliderInput(config.sliderId, config.valueId));
+                    }
+                }
+            });
+
+            const closeButton = wrapper.querySelector('#perplexity-config-close');
+            const saveButton = wrapper.querySelector('#perplexity-config-save');
+
+            this.addEventListener(closeButton, 'click', () => this.unmount());
+            this.addEventListener(saveButton, 'click', () => this.handleSave());
+
+            this.element = wrapper;
+        }
+    }
+
+    // ==================== Fetch Interceptor Component ====================
+
+    class FetchInterceptor extends ReactLikeComponent {
+        constructor(props) {
+            super(props);
+            this.originalFetch = null;
+            this.apiService = new APIService();
+            this.state = globalState.getState();
+
+            this.unsubscribe = globalState.subscribe((newState) => {
+                this.setState(newState);
+            });
+        }
+
+        componentDidMount() {
+            this.initInterceptor();
+        }
+
+        componentWillUnmount() {
+            if (this.unsubscribe) {
+                this.unsubscribe();
+            }
+        }
+
+        initInterceptor() {
             if (typeof unsafeWindow === 'undefined') {
                 return;
             }
-            const w = unsafeWindow;
-            w.t3ChatSearch = w.t3ChatSearch || { needSearch: false }; // Ensure namespace exists
-            FetchInterceptor.originalFetch = w.fetch.bind(w); // Bind to w (unsafeWindow)
-            w.fetch = async function(input, initOptions) { // Use standard function to ensure 'this' is unsafeWindow
 
+            const w = unsafeWindow;
+            w.t3ChatSearch = w.t3ChatSearch || { needSearch: false };
+            this.originalFetch = w.fetch.bind(w);
+
+            w.fetch = async (input, initOptions) => {
                 if (!unsafeWindow.t3ChatSearch.needSearch || !initOptions?.body) {
-                    return FetchInterceptor.originalFetch.call(this, input, initOptions);
+                    return this.originalFetch.call(w, input, initOptions);
                 }
 
                 let data;
                 try {
                     data = JSON.parse(initOptions.body);
                 } catch {
-                    return FetchInterceptor.originalFetch.call(this, input, initOptions);
+                    return this.originalFetch.call(w, input, initOptions);
                 }
 
                 if (!Array.isArray(data.messages)) {
-                    return FetchInterceptor.originalFetch.call(this, input, initOptions);
+                    return this.originalFetch.call(w, input, initOptions);
                 }
 
                 const messages = data.messages;
                 const lastIdx = messages.length - 1;
-                if (lastIdx < 0 || messages[lastIdx]?.role !== 'user') { // Ensure there's a last user message
-                    return FetchInterceptor.originalFetch.call(this, input, initOptions);
+                if (lastIdx < 0 || messages[lastIdx]?.role !== 'user') {
+                    return this.originalFetch.call(w, input, initOptions);
                 }
+
                 const originalPrompt = messages[lastIdx]?.content;
-
                 if (typeof originalPrompt !== 'string') {
-                    return FetchInterceptor.originalFetch.call(this, input, initOptions);
+                    return this.originalFetch.call(w, input, initOptions);
                 }
 
-                UIManager.updateSearchToggleLoadingState(true);
+                globalState.setState({ isLoading: true });
 
-                const contextMessagesForApi = API_CONFIG.conversationContextEnabled ? messages.slice(0, lastIdx) : [];
+                const contextMessagesForApi = CONFIG.API.conversationContextEnabled ? messages.slice(0, lastIdx) : [];
                 let searchRes = null;
 
-                if (selectedApiProvider === API_PROVIDERS.EXA) {
+                const currentState = globalState.getState();
+
+                if (currentState.selectedApiProvider === CONFIG.API_PROVIDERS.EXA) {
                     let exaQuery = originalPrompt;
-                    if (API_CONFIG.conversationContextEnabled && contextMessagesForApi.length > 0) {
+                    if (CONFIG.API.conversationContextEnabled && contextMessagesForApi.length > 0) {
                         const formattedHistory = contextMessagesForApi.map(msg => {
                             let roleDisplay = msg.role === 'user' ? 'User' : (msg.role === 'assistant' ? 'Assistant' : (msg.role || 'System'));
-                            // Replace newlines within a single message's content with spaces to keep each history item on one logical line in the combined string.
                             const content = String(msg.content || '').replace(/\n/g, ' ');
                             return `${roleDisplay}: ${content}`;
-                        }).join('\n'); // Join distinct messages with newlines.
+                        }).join('\n');
                         exaQuery = `Conversation History:\n${formattedHistory}\n\nLatest User Query: ${originalPrompt}`;
                     }
-                    searchRes = await ExaAPI.call(exaQuery, contextMessagesForApi); // contextMessagesForApi is still passed for potential future direct use by ExaAPI
-                } else if (selectedApiProvider === API_PROVIDERS.PERPLEXITY) {
-                    searchRes = await PerplexityAPI.call(originalPrompt, contextMessagesForApi); // Perplexity handles the array of messages directly
+                    searchRes = await this.apiService.callExaAPI(exaQuery, contextMessagesForApi);
+                } else if (currentState.selectedApiProvider === CONFIG.API_PROVIDERS.PERPLEXITY) {
+                    searchRes = await this.apiService.callPerplexityAPI(originalPrompt, contextMessagesForApi);
                 }
 
-                UIManager.updateSearchToggleLoadingState(false);
+                globalState.setState({ isLoading: false });
 
                 if (searchRes) {
-                    // Ensure originalPrompt is always present, even if searchRes is extensive.
                     const englishInstruction = "The following information was retrieved from a real-time web search using an external tool. Please use these results to inform your response:\n";
                     messages[lastIdx].content = `${englishInstruction}\n[Web Search Results]\n${searchRes}\n\n[Original Message]\n${originalPrompt}`;
                     initOptions.body = JSON.stringify(data);
-                } else {
-                    // Do not modify the prompt if searchRes is null or empty
                 }
-                return FetchInterceptor.originalFetch.call(this, input, initOptions);
+
+                return this.originalFetch.call(w, input, initOptions);
             };
         }
-    };
 
-    // --- Core: Tampermonkey Menu Commands ---
-    const MenuCommands = {
-        init: async () => {
-            GM_registerMenuCommand('Set API Provider & Key', async () => {
-                ApiKeyModal.show();
+        render() {
+            // This is a service component, no rendering needed
+        }
+    }
+
+    // ==================== Main Application Component ====================
+
+    class T3ChatSearchApp extends ReactLikeComponent {
+        constructor() {
+            super();
+            this.components = {
+                styleManager: new StyleManager(),
+                fetchInterceptor: new FetchInterceptor(),
+                searchToggle: null,
+                searchingIndicator: new SearchingIndicator()
+            };
+            this.injectionObserver = null;
+            this.injectionInterval = null;
+        }
+
+        async componentDidMount() {
+            await this.loadStoredSettings();
+            await this.initMenuCommands();
+
+            this.components.styleManager.mount();
+            this.components.fetchInterceptor.mount();
+            this.components.searchingIndicator.mount();
+
+            this.setupUIInjection();
+        }
+
+        componentWillUnmount() {
+            if (this.injectionObserver) {
+                this.injectionObserver.disconnect();
+            }
+            if (this.injectionInterval) {
+                clearInterval(this.injectionInterval);
+            }
+
+            Object.values(this.components).forEach(component => {
+                if (component && component.unmount) {
+                    component.unmount();
+                }
+            });
+        }
+
+        async loadStoredSettings() {
+            const selectedApiProvider = await GM_getValue(CONFIG.STORAGE_KEYS.SELECTED_API_PROVIDER, CONFIG.API_PROVIDERS.EXA);
+            const exaApiKey = await GM_getValue(CONFIG.STORAGE_KEYS.API_KEY_EXA);
+            const perplexityApiKey = await GM_getValue(CONFIG.STORAGE_KEYS.API_KEY_PERPLEXITY);
+
+            const exaNumResults = await GM_getValue(CONFIG.STORAGE_KEYS.EXA_NUM_RESULTS, CONFIG.DEFAULTS.EXA_NUM_RESULTS);
+            const exaSubpages = await GM_getValue(CONFIG.STORAGE_KEYS.EXA_SUBPAGES, CONFIG.DEFAULTS.EXA_SUBPAGES);
+            const exaLinks = await GM_getValue(CONFIG.STORAGE_KEYS.EXA_LINKS, CONFIG.DEFAULTS.EXA_LINKS);
+            const exaImageLinks = await GM_getValue(CONFIG.STORAGE_KEYS.EXA_IMAGE_LINKS, CONFIG.DEFAULTS.EXA_IMAGE_LINKS);
+
+            const perplexityModel = await GM_getValue(CONFIG.STORAGE_KEYS.PERPLEXITY_MODEL, CONFIG.DEFAULTS.PERPLEXITY_MODEL);
+            const perplexityTemperature = await GM_getValue(CONFIG.STORAGE_KEYS.PERPLEXITY_TEMPERATURE, CONFIG.DEFAULTS.PERPLEXITY_TEMPERATURE);
+            const perplexityMaxTokens = await GM_getValue(CONFIG.STORAGE_KEYS.PERPLEXITY_MAX_TOKENS, CONFIG.DEFAULTS.PERPLEXITY_MAX_TOKENS);
+            const perplexityTopP = await GM_getValue(CONFIG.STORAGE_KEYS.PERPLEXITY_TOP_P, CONFIG.DEFAULTS.PERPLEXITY_TOP_P);
+            const perplexityTopK = await GM_getValue(CONFIG.STORAGE_KEYS.PERPLEXITY_TOP_K, CONFIG.DEFAULTS.PERPLEXITY_TOP_K);
+            const perplexityPresencePenalty = await GM_getValue(CONFIG.STORAGE_KEYS.PERPLEXITY_PRESENCE_PENALTY, CONFIG.DEFAULTS.PERPLEXITY_PRESENCE_PENALTY);
+            const perplexityFrequencyPenalty = await GM_getValue(CONFIG.STORAGE_KEYS.PERPLEXITY_FREQUENCY_PENALTY, CONFIG.DEFAULTS.PERPLEXITY_FREQUENCY_PENALTY);
+
+            globalState.setState({
+                selectedApiProvider,
+                exaApiKey,
+                perplexityApiKey,
+                exaNumResults,
+                exaSubpages,
+                exaLinks,
+                exaImageLinks,
+                perplexityModel,
+                perplexityTemperature,
+                perplexityMaxTokens,
+                perplexityTopP,
+                perplexityTopK,
+                perplexityPresencePenalty,
+                perplexityFrequencyPenalty
+            });
+        }
+
+        async initMenuCommands() {
+            GM_registerMenuCommand('Set API Provider & Key', () => {
+                const modal = new APIKeyModal();
+                modal.mount(document.body);
             });
 
             GM_registerMenuCommand('Reset Current API Key', async () => {
-                selectedApiProvider = await GM_getValue(GM_STORAGE_KEYS.SELECTED_API_PROVIDER, API_PROVIDERS.EXA);
-                if (selectedApiProvider === API_PROVIDERS.EXA) {
-                    await GM_setValue(GM_STORAGE_KEYS.API_KEY_EXA, '');
-                    exaApiKey = null;
-                } else if (selectedApiProvider === API_PROVIDERS.PERPLEXITY) {
-                    await GM_setValue(GM_STORAGE_KEYS.API_KEY_PERPLEXITY, '');
-                    perplexityApiKey = null;
+                const state = globalState.getState();
+                if (state.selectedApiProvider === CONFIG.API_PROVIDERS.EXA) {
+                    await GM_setValue(CONFIG.STORAGE_KEYS.API_KEY_EXA, '');
+                    globalState.setState({ exaApiKey: null });
+                } else if (state.selectedApiProvider === CONFIG.API_PROVIDERS.PERPLEXITY) {
+                    await GM_setValue(CONFIG.STORAGE_KEYS.API_KEY_PERPLEXITY, '');
+                    globalState.setState({ perplexityApiKey: null });
                 }
                 location.reload();
             });
 
             GM_registerMenuCommand('Configure API Parameters', async () => {
-                selectedApiProvider = await GM_getValue(GM_STORAGE_KEYS.SELECTED_API_PROVIDER, API_PROVIDERS.EXA);
-                if (selectedApiProvider === API_PROVIDERS.EXA) {
-                    ExaConfigModal.show();
-                } else if (selectedApiProvider === API_PROVIDERS.PERPLEXITY) {
-                    PerplexityConfigModal.show();
+                const state = globalState.getState();
+                if (state.selectedApiProvider === CONFIG.API_PROVIDERS.EXA) {
+                    const modal = new ExaConfigModal();
+                    modal.mount(document.body);
+                } else if (state.selectedApiProvider === CONFIG.API_PROVIDERS.PERPLEXITY) {
+                    const modal = new PerplexityConfigModal();
+                    modal.mount(document.body);
                 }
             });
-
-        }
-    };
-
-    // --- Initialization ---
-    async function main() {
-        selectedApiProvider = await GM_getValue(GM_STORAGE_KEYS.SELECTED_API_PROVIDER, API_PROVIDERS.EXA);
-
-        exaApiKey = await GM_getValue(GM_STORAGE_KEYS.API_KEY_EXA);
-        if (!exaApiKey) {
-        } else {
         }
 
-        perplexityApiKey = await GM_getValue(GM_STORAGE_KEYS.API_KEY_PERPLEXITY);
-        if (!perplexityApiKey) {
-        } else {
+        setupUIInjection() {
+            // Mutation observer for dynamic injection
+            const injectionObserverTargetParent = document.querySelector(CONFIG.SELECTORS.justifyDiv)?.parentElement || document.body;
+            this.injectionObserver = new MutationObserver(() => {
+                this.injectSearchToggle();
+            });
+            this.injectionObserver.observe(injectionObserverTargetParent, { childList: true, subtree: true });
+
+            // Interval backup for injection
+            this.injectionInterval = setInterval(() => {
+                this.injectSearchToggle();
+            }, 10);
+
+            // Initial injection attempt
+            this.injectSearchToggle();
         }
 
+        injectSearchToggle() {
+            const justifyDiv = document.querySelector(CONFIG.SELECTORS.justifyDiv);
+            if (!justifyDiv) return false;
 
-        exaNumResults = await GM_getValue(GM_STORAGE_KEYS.EXA_NUM_RESULTS, DEFAULT_EXA_NUM_RESULTS);
-        exaSubpages = await GM_getValue(GM_STORAGE_KEYS.EXA_SUBPAGES, DEFAULT_EXA_SUBPAGES);
-        exaLinks = await GM_getValue(GM_STORAGE_KEYS.EXA_LINKS, DEFAULT_EXA_LINKS);
-        exaImageLinks = await GM_getValue(GM_STORAGE_KEYS.EXA_IMAGE_LINKS, DEFAULT_EXA_IMAGE_LINKS);
+            const modelTempSection = justifyDiv.querySelector(CONFIG.SELECTORS.modelTempSection);
+            if (!modelTempSection) return false;
 
+            const mlGroup = modelTempSection.querySelector(CONFIG.SELECTORS.mlGroup);
+            if (!mlGroup) return false;
 
-        perplexityModel = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_MODEL, DEFAULT_PERPLEXITY_MODEL);
-        perplexityTemperature = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_TEMPERATURE, DEFAULT_PERPLEXITY_TEMPERATURE);
-        perplexityMaxTokens = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_MAX_TOKENS, DEFAULT_PERPLEXITY_MAX_TOKENS);
-        perplexityTopP = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_TOP_P, DEFAULT_PERPLEXITY_TOP_P);
-        perplexityTopK = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_TOP_K, DEFAULT_PERPLEXITY_TOP_K);
-        perplexityPresencePenalty = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_PRESENCE_PENALTY, DEFAULT_PERPLEXITY_PRESENCE_PENALTY);
-        perplexityFrequencyPenalty = await GM_getValue(GM_STORAGE_KEYS.PERPLEXITY_FREQUENCY_PENALTY, DEFAULT_PERPLEXITY_FREQUENCY_PENALTY);
-
-        await MenuCommands.init();
-        StyleManager.injectGlobalStyles();
-        FetchInterceptor.init(); // Init fetch interceptor early
-
-        const injectionObserverTargetParent = document.querySelector(SELECTORS.justifyDiv)?.parentElement || document.body;
-        const injectionObserver = new MutationObserver(async (mutations, obs) => {
-
-            const targetContainer = document.querySelector(SELECTORS.mlGroup);
-            if (targetContainer) {
-                 if(await UIManager.injectSearchToggle()) {
-
-                 }
-            } else {
-
-                const justifyDiv = document.querySelector(SELECTORS.justifyDiv);
-                if (justifyDiv) await UIManager.injectSearchToggle();
+            const existingBtn = mlGroup.querySelector('#search-toggle');
+            if (existingBtn) {
+                if (mlGroup.lastElementChild !== existingBtn) {
+                    mlGroup.appendChild(existingBtn);
+                }
+                return true;
             }
 
-
-            const existingButton = document.querySelector(`#${UI_IDS.searchToggle}`);
-            if (!existingButton) {
-                await UIManager.injectSearchToggle();
+            if (!this.components.searchToggle) {
+                this.components.searchToggle = new SearchToggle();
             }
-        });
-        injectionObserver.observe(injectionObserverTargetParent, { childList: true, subtree: true });
-        await UIManager.injectSearchToggle(); // Initial attempt
 
-
-        setInterval(async () => {
-            const existingButton = document.querySelector(`#${UI_IDS.searchToggle}`);
-            if (!existingButton) {
-                await UIManager.injectSearchToggle();
+            this.components.searchToggle.render();
+            if (this.components.searchToggle.element) {
+                mlGroup.appendChild(this.components.searchToggle.element);
+                // Trigger componentDidMount manually since we're not using mount()
+                this.components.searchToggle.componentDidMount();
             }
-        }, 100);
+
+            return true;
+        }
+
+        render() {
+            // Main app component, rendering is handled by sub-components
+        }
     }
 
-    // --- Start the script ---
-    main();
+    // ==================== Application Initialization ====================
 
-  })();
+    async function initializeApp() {
+        const app = new T3ChatSearchApp();
+        app.mount();
+    }
+
+    // Start the application
+    initializeApp();
+
+})();

@@ -246,20 +246,20 @@
             const styleEl = this.createElement('style', { id: 't3chat-search-style' });
             styleEl.textContent = `
                 /* Button toggle animation */
-                #search-toggle {
-                    position: relative !important;
-                    overflow: visible !important;
+                #search-toggle { 
+                    position: relative !important; 
+                    overflow: visible !important; 
                 }
                 button#search-toggle.on,
-                #search-toggle[data-state="open"] {
-                    background-color: rgba(219,39,119,0.15) !important;
+                #search-toggle[data-state="open"] { 
+                    background-color: rgba(219,39,119,0.15) !important; 
                 }
                 button#search-toggle.on:hover,
-                #search-toggle[data-state="open"]:hover {
-                    background-color: rgba(219,39,119,0.25) !important;
+                #search-toggle[data-state="open"]:hover { 
+                    background-color: rgba(219,39,119,0.25) !important; 
                 }
-                button#search-toggle:not(.on):hover {
-                    background-color: rgba(0,0,0,0.04) !important;
+                button#search-toggle:not(.on):hover { 
+                    background-color: rgba(0,0,0,0.04) !important; 
                 }
 
                 /* Modal Styles */
@@ -783,7 +783,7 @@
         componentDidUpdate(prevProps, prevState) {
             // Update button classes when state changes
             if (this.element && (
-                prevState.searchToggleState !== this.state.searchToggleState ||
+                prevState.searchToggleState !== this.state.searchToggleState || 
                 prevState.selectedApiProvider !== this.state.selectedApiProvider ||
                 prevState.perplexityModel !== this.state.perplexityModel
             )) {
@@ -793,12 +793,12 @@
 
         updateButtonState() {
             if (!this.element) return;
-
+            
             const { searchToggleState, selectedApiProvider, perplexityModel } = this.state;
-
+            
             // Clear only state-specific classes, preserve base classes
             this.element.classList.remove('on');
-
+            
             // Add state classes and apply styles
             if (searchToggleState) {
                 this.element.classList.add('on');
@@ -812,18 +812,18 @@
                 this.element.style.borderColor = '';
                 this.element.style.color = '';
             }
-
+            
             // Set data-mode attribute as shown in the example
             this.element.setAttribute('data-mode', searchToggleState ? 'on' : 'off');
-
+            
             // Ensure button has relative positioning for tooltip
             this.element.style.position = 'relative';
             this.element.style.overflow = 'visible';
-
+            
             // Update aria attributes
             this.element.setAttribute('aria-label', searchToggleState ? 'Disable search' : 'Enable search');
             this.element.setAttribute('data-state', searchToggleState ? 'open' : 'closed');
-
+            
             // Update tooltip content
             const tooltip = this.element.querySelector('.search-tooltip');
             if (tooltip) {
@@ -891,7 +891,7 @@
             this.state = globalState.getState();
             this.targetElement = null;
             this.dotsInterval = null;
-
+            
             this.unsubscribe = globalState.subscribe((newState) => {
                 this.setState(newState);
             });
@@ -920,7 +920,7 @@
                     this.positionIndicator();
                 }
             });
-
+            
             this.addEventListener(window, 'resize', () => {
                 if (this.state.isLoading) {
                     this.positionIndicator();
@@ -958,7 +958,7 @@
                 clearInterval(this.dotsInterval);
                 this.dotsInterval = null;
             }
-
+            
             const dotsElement = this.element?.querySelector('.dots');
             if (!dotsElement) {
                 console.log('Dots element not found');
@@ -968,7 +968,7 @@
             let dotsCount = 0;
             // 立即設置初始狀態
             dotsElement.textContent = '';
-
+            
             this.dotsInterval = setInterval(() => {
                 dotsCount = (dotsCount + 1) % 4; // 1, 2, 3, 0
                 const dots = '.'.repeat(dotsCount);
@@ -1487,7 +1487,7 @@
                 globalState.setState({ isLoading: false });
 
                 if (searchRes) {
-                    const englishInstruction = "The following information was retrieved from a real-time web search using an external tool. Please use these results to inform your response:\n";
+                    const englishInstruction = "The following information was obtained through real-time web searches using external tools. Please refer to these results to enhance your response, and include all links at the end of your answer:\n";
                     messages[lastIdx].content = `${englishInstruction}\n[Web Search Results]\n${searchRes}\n\n[Original Message]\n${originalPrompt}`;
                     initOptions.body = JSON.stringify(data);
                 }
@@ -1519,11 +1519,11 @@
         async componentDidMount() {
             await this.loadStoredSettings();
             await this.initMenuCommands();
-
+            
             this.components.styleManager.mount();
             this.components.fetchInterceptor.mount();
             this.components.searchingIndicator.mount();
-
+            
             this.setupUIInjection();
         }
 
